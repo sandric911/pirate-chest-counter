@@ -146,6 +146,11 @@ public sealed class WebServer : IAsyncDisposable
         };
     }
 
+    /// <summary>Embedded file names, normalised to '/' (MSBuild keeps a backslash for sub-folders such as fonts).</summary>
+    private static readonly Dictionary<string, string> Resources = typeof(WebServer).Assembly.GetManifestResourceNames()
+        .GroupBy(n => n.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
     private static IResult ServeEmbedded(string? path)
     {
         path = string.IsNullOrEmpty(path) ? "index.html" : path.Replace('\\', '/');
@@ -158,7 +163,7 @@ public sealed class WebServer : IAsyncDisposable
             return Results.File(Path.Combine(AppPaths.DataDir, "map.png"), "image/png");
         }
         var asm = typeof(WebServer).Assembly;
-        var stream = asm.GetManifestResourceStream("wwwroot/" + path);
+        var stream = Resources.TryGetValue("wwwroot/" + path, out var resName) ? asm.GetManifestResourceStream(resName) : null;
         if (stream == null)
         {
             if (!path.Contains('.'))
