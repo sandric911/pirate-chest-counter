@@ -13,7 +13,7 @@ public sealed class AppServices
     public required Updater Updater { get; init; }
 }
 
-/// <summary>Tray icon and menu: «Открыть статистику», «Пересчитать всё», «Автозапуск», «Выход».</summary>
+/// <summary>Tray icon and menu: open statistics, recount, start with Windows, exit (in the interface language).</summary>
 public sealed class TrayApp : ApplicationContext
 {
     private readonly NotifyIcon _icon;
@@ -29,16 +29,24 @@ public sealed class TrayApp : ApplicationContext
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
 
         var menu = new ContextMenuStrip();
-        var open = new ToolStripMenuItem("Открыть статистику", null, (_, _) => OpenBrowser()) { Font = new Font(SystemFonts.MenuFont ?? Control.DefaultFont, FontStyle.Bold) };
-        var recount = new ToolStripMenuItem("Пересчитать всё", null, (_, _) =>
+        var open = new ToolStripMenuItem("", null, (_, _) => OpenBrowser()) { Font = new Font(SystemFonts.MenuFont ?? Control.DefaultFont, FontStyle.Bold) };
+        var recount = new ToolStripMenuItem("", null, (_, _) =>
         {
             _s.Processor.RecountAll();
-            Notify("Пересчёт запущен", "Все реплеи будут посчитаны заново.");
+            Notify(Lang.T("Пересчёт запущен", "Recount started"), Lang.T("Все реплеи будут посчитаны заново.", "All replays will be counted again."));
         });
-        _autostart = new ToolStripMenuItem("Автозапуск", null, (_, _) => ToggleAutostart()) { Checked = Autostart.IsEnabled() };
-        var exit = new ToolStripMenuItem("Выход", null, (_, _) => ExitThread());
+        _autostart = new ToolStripMenuItem("", null, (_, _) => ToggleAutostart()) { Checked = Autostart.IsEnabled() };
+        var exit = new ToolStripMenuItem("", null, (_, _) => ExitThread());
         menu.Items.AddRange(new ToolStripItem[] { open, recount, _autostart, new ToolStripSeparator(), exit });
-        menu.Opening += (_, _) => _autostart.Checked = Autostart.IsEnabled();
+        menu.Opening += (_, _) =>
+        {
+            open.Text = Lang.T("Открыть статистику", "Open statistics");
+            recount.Text = Lang.T("Пересчитать всё", "Recount everything");
+            _autostart.Text = Lang.T("Автозапуск", "Start with Windows");
+            exit.Text = Lang.T("Выход", "Exit");
+            _autostart.Checked = Autostart.IsEnabled();
+        };
+        Lang.Changed += () => _ui.Post(_ => UpdateTooltip(), null);
 
         _icon = new NotifyIcon
         {
@@ -106,7 +114,9 @@ public sealed class TrayApp : ApplicationContext
             return;
         }
         var total = TotalMine();
-        _ui.Post(_ => Notify("Матч посчитан", $"+{summary.Count.Mine} {Plural(summary.Count.Mine)} (мои) · всего {total}"), null);
+        var k = summary.Count.Mine;
+        _ui.Post(_ => Notify(Lang.T("Матч посчитан", "Match counted"),
+            Lang.T($"+{k} {Lang.Chests(k)} (мои) · всего {total}", $"+{k} {Lang.Chests(k)} (mine) · {total} in total")), null);
     }
 
     private void OnBatch(int counted)
@@ -117,31 +127,17 @@ public sealed class TrayApp : ApplicationContext
             UpdateTooltip();
             if (counted > 0)
             {
-                Notify("Реплеи посчитаны", $"Матчей: {counted} · всего {total} {Plural(total)} (мои)");
+                Notify(Lang.T("Реплеи посчитаны", "Replays counted"),
+                    Lang.T($"Матчей: {counted} · всего {total} {Lang.Chests(total)} (мои)", $"Matches: {counted} · {total} {Lang.Chests(total)} in total (mine)"));
             }
         }, null);
-    }
-
-    public static string Plural(int n)
-    {
-        var m10 = n % 10;
-        var m100 = n % 100;
-        if (m10 == 1 && m100 != 11)
-        {
-            return "сундук";
-        }
-        if (m10 is >= 2 and <= 4 && m100 is < 12 or > 14)
-        {
-            return "сундука";
-        }
-        return "сундуков";
     }
 
     private void UpdateTooltip()
     {
         try
         {
-            var t = $"Сундуки: {TotalMine()} (мои)";
+            var t = Lang.T($"Сундуки: {TotalMine()} (мои)", $"Chests: {TotalMine()} (mine)");
             _icon.Text = t.Length > 63 ? t[..63] : t;
         }
         catch
@@ -151,7 +147,8 @@ public sealed class TrayApp : ApplicationContext
     }
 
     /// <summary>Shown after a self-update so the user knows the new version is running.</summary>
-    public void ShowUpdated() => Notify("Программа обновлена", $"Pirate Chest Counter {AppInfo.VersionText} установлен автоматически.");
+    public void ShowUpdated() => Notify(Lang.T("Программа обновлена", "Program updated"),
+        Lang.T($"Pirate Chest Counter {AppInfo.VersionText} установлен автоматически.", $"Pirate Chest Counter {AppInfo.VersionText} was installed automatically."));
 
     private void Notify(string title, string text)
     {

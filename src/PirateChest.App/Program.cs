@@ -86,6 +86,7 @@ internal static class Program
         ApplicationConfiguration.Initialize();
 
         var db = new Database(AppPaths.DbPath);
+        Lang.Load(db);
         var atlas = db.LoadAtlas();
         SeedAtlas(atlas);
         var services = new AppServices
@@ -105,7 +106,7 @@ internal static class Program
         catch (Exception ex)
         {
             Log.Error("web server", ex);
-            MessageBox.Show("Не удалось запустить локальный веб-интерфейс: " + ex.Message, AppInfo.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(Lang.T("Не удалось запустить локальный веб-интерфейс: ", "Could not start the local web interface: ") + ex.Message, AppInfo.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
         SingleInstance.Publish(web.Port);

@@ -29,3 +29,8 @@ instance.json
 
 # Local tooling
 .claude/settings.local.json
+
+# Fonts are licensed: users bring their own (font.ttf next to the data), never commit one
+*.ttf
+*.otf
+*.woff

@@ -1,5 +1,12 @@
-/* Calm dark theme, Arial. Chest pictures and the crown / squad / timer / chest icons are Fortnite assets
-   from the Fortnite Wiki (© Epic Games, see docs/ASSETS.md); the white icons are tinted with CSS masks. */
+/* Calm dark theme. Chest pictures and the crown / squad / timer / chest icons are Fortnite assets from the
+   Fortnite Wiki (© Epic Games, see docs/ASSETS.md); the white icons are tinted with CSS masks.
+   Display font: the user's own copy (installed in Windows, or font.ttf next to the data, served as /user-font);
+   it is never shipped. Without it everything is Arial. Tables always use Arial. */
+@font-face {
+  font-family: "PCC Display";
+  src: local("FORTNITE BATTLEFEST"), local("FORTNITEBATTLEFEST"), url(/user-font);
+  font-display: swap;
+}
 
 :root {
   --bg: #0f131b;
@@ -17,12 +24,13 @@
   --rare: #4f8fcf;
   --sprite: #9a74d6;
   --font: Arial, "Helvetica Neue", Helvetica, sans-serif;
+  --display: "PCC Display", Arial, "Helvetica Neue", Helvetica, sans-serif;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
-  font-family: var(--font);
+  font-family: var(--display);
   font-size: 15px;
   line-height: 1.4;
   color: var(--text);
@@ -58,12 +66,6 @@ nav.tabs a:hover { color: var(--text); }
 nav.tabs a.active { color: var(--text); }
 nav.tabs a.active::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 0; height: 3px; background: var(--accent); border-radius: 2px 2px 0 0; }
 .top .spacer { flex: 1; }
-.chip {
-  display: flex; align-items: center; gap: 6px; padding: 3px 14px 3px 6px; border-radius: 999px;
-  background: var(--panel); border: 1px solid var(--line); font-weight: 700; font-size: 17px; font-variant-numeric: tabular-nums;
-}
-.chip img { width: 28px; height: 28px; }
-.top .ver { color: var(--muted); font-size: 13px; }
 
 main { max-width: 1240px; margin: 0 auto; padding: 26px 28px 60px; }
 h1 { font-size: 26px; font-weight: 700; margin: 0 0 18px; }
@@ -145,7 +147,7 @@ h3 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacin
 
 /* ---------------------------------------------------------------- tables */
 .boardwrap { max-height: 620px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
-.board { width: 100%; border-collapse: collapse; font-size: 15px; }
+.board { width: 100%; border-collapse: collapse; font-family: var(--font); font-size: 15px; letter-spacing: 0; }
 .board th {
   position: sticky; top: 0; z-index: 1; text-align: left; padding: 10px 14px; background: var(--panel-2);
   font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--label);
@@ -175,7 +177,7 @@ h3 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacin
 
 /* ---------------------------------------------------------------- buttons, inputs */
 button {
-  font-family: var(--font); font-weight: 700; font-size: 14px; cursor: pointer; padding: 8px 16px; border-radius: 8px;
+  font-family: var(--display); font-weight: 700; font-size: 14px; cursor: pointer; padding: 8px 16px; border-radius: 8px;
   border: 1px solid var(--line); color: var(--text); background: var(--panel-2);
   display: inline-flex; align-items: center; gap: 8px;
 }
@@ -185,7 +187,7 @@ button.primary:hover { background: #e2bf62; }
 button:disabled { opacity: .55; cursor: default; }
 button.icon { padding: 4px 0; width: 32px; justify-content: center; font-size: 18px; line-height: 1; }
 select {
-  font-family: var(--font); font-size: 14px; color: var(--text); padding: 7px 10px; min-width: 240px;
+  font-family: var(--display); font-size: 14px; color: var(--text); padding: 7px 10px; min-width: 240px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
 }
 select option { background: var(--panel); }
@@ -196,7 +198,7 @@ label.chk input { accent-color: var(--accent); width: 15px; height: 15px; margin
 
 /* ---------------------------------------------------------------- charts */
 .chart svg:not(.ico) { width: 100%; height: auto; display: block; }
-.chart .axis text { fill: var(--muted); font-size: 22px; font-family: var(--font); }
+.chart .axis text { fill: var(--muted); font-size: 22px; font-family: var(--display); }
 .chart .grid line { stroke: rgba(255, 255, 255, .07); }
 .legend { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
 .legend i { display: inline-block; width: 11px; height: 11px; margin-right: 6px; border-radius: 2px; vertical-align: -1px; }
@@ -232,3 +234,42 @@ label.chk input { accent-color: var(--accent); width: 15px; height: 15px; margin
 .empty { color: var(--muted); padding: 20px; text-align: center; }
 .tip { position: fixed; pointer-events: none; background: rgba(13, 17, 25, .97); border: 1px solid var(--line); color: var(--text); padding: 8px 11px; border-radius: 8px; font-size: 13px; z-index: 50; display: none; box-shadow: 0 6px 20px rgba(0, 0, 0, .4); }
 .tip b { font-weight: 700; }
+
+/* ---------------------------------------------------------------- settings */
+.settings .setting { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.settings .label { color: var(--muted); font-size: 14px; min-width: 120px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: var(--panel); color: var(--muted); padding: 8px 18px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--accent); color: var(--accent-ink); }
+.seg button:not(.on):hover { background: var(--panel-2); color: var(--text); }
+
+/* ---------------------------------------------------------------- display font present: heavier, all-caps
+   condensed face reads small text worse than Arial, so captions get a bit bigger (tables keep Arial) */
+body.df { letter-spacing: .3px; font-synthesis: none; } /* the face has one weight: no fake bold */
+body.df .brand { font-size: 22px; font-weight: 400; }
+body.df nav.tabs a { font-size: 20px; font-weight: 400; }
+body.df h1 { font-size: 38px; font-weight: 400; }
+body.df h2 { font-size: 23px; font-weight: 400; }
+body.df h3 { font-size: 19px; font-weight: 400; letter-spacing: .6px; }
+body.df .tile .name { font-size: 23px; font-weight: 400; }
+body.df .tile .sub, body.df .stat .d, body.df .clocknote { font-size: 19px; }
+body.df .stat .k, body.df .ministat .k, body.df .legend, body.df .kv, body.df .kv > div:nth-child(odd), body.df .settings .label { font-size: 19px; }
+body.df .hero .value { font-size: 76px; font-weight: 400; }
+body.df .typetile .count, body.df .stattile .value { font-size: 52px; font-weight: 400; }
+body.df .stat .v, body.df .clock { font-size: 40px; font-weight: 400; }
+body.df .stats.small .v { font-size: 28px; }
+body.df .ministat .v { font-size: 28px; font-weight: 400; }
+body.df .stat .v small { font-size: 19px; }
+body.df button, body.df select, body.df label.chk, body.df .maplegend { font-size: 19px; font-weight: 400; }
+body.df .maphint { font-size: 18px; }
+body.df .steps { font-size: 20px; }
+body.df .steps b, body.df .kv b, body.df .tip b { font-weight: 400; }
+body.df .tip { font-size: 18px; }
+body.df .fine { font-size: 17px; }
+body.df .loading { font-size: 24px; }
+body.df .chart .axis text { font-size: 26px; }
+body.df .mapframe .credit { font-size: 16px; }
+body.df .mapside .kv { font-size: 19px; }
+body.df .steps b { color: var(--accent); }
+.mapframe .zoom button { font-family: var(--font); font-weight: 700; }

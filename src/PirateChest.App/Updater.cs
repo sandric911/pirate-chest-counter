@@ -9,7 +9,12 @@ public sealed class UpdateState
 {
     public string? Latest { get; set; }
     public DateTime? CheckedUtc { get; set; }
-    public string Status { get; set; } = "ещё не проверялось";
+    private (string Ru, string En) _status = ("ещё не проверялось", "not checked yet");
+
+    /// <summary>Status text in the current interface language.</summary>
+    public string Status => Lang.T(_status.Ru, _status.En);
+
+    public void SetStatus(string ru, string en) => _status = (ru, en);
     public bool Available { get; set; }
 }
 
@@ -57,11 +62,11 @@ public sealed class Updater : IDisposable
         using var resp = await Http.SendAsync(req, ct);
         if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            throw new HttpRequestException($"на github.com/{AppInfo.UpdateRepo} пока нет релизов");
+            throw new LocalizedException($"на github.com/{AppInfo.UpdateRepo} пока нет релизов", $"github.com/{AppInfo.UpdateRepo} has no releases yet");
         }
         if (!resp.IsSuccessStatusCode)
         {
-            throw new HttpRequestException($"GitHub ответил {(int)resp.StatusCode}");
+            throw new LocalizedException($"GitHub ответил {(int)resp.StatusCode}", $"GitHub answered {(int)resp.StatusCode}");
         }
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
         var tag = doc.RootElement.GetProperty("tag_name").GetString();
@@ -100,31 +105,31 @@ public sealed class Updater : IDisposable
             var rel = await LatestAsync();
             if (rel == null)
             {
-                State.Status = "в последнем релизе нет файлов программы";
+                State.SetStatus("в последнем релизе нет файлов программы", "the latest release has no program files");
                 return;
             }
             State.Latest = rel.Tag;
             if (rel.Version <= CurrentVersion)
             {
                 State.Available = false;
-                State.Status = "установлена последняя версия";
+                State.SetStatus("установлена последняя версия", "the latest version is installed");
                 return;
             }
             State.Available = true;
             if (!AppPaths.RunningInstalled)
             {
-                State.Status = $"доступна {rel.Tag} (автообновление работает только у установленной программы)";
+                State.SetStatus($"доступна {rel.Tag} (автообновление работает только у установленной программы)", $"{rel.Tag} is available (auto-update works only for the installed program)");
                 return;
             }
             if (!IsGitHubUrl(rel.ExeUrl) || !IsGitHubUrl(rel.SumsUrl))
             {
-                State.Status = "ссылка на файл не ведёт на github.com — обновление пропущено";
+                State.SetStatus("ссылка на файл не ведёт на github.com — обновление пропущено", "the file link does not point to github.com, update skipped");
                 return;
             }
 
-            State.Status = $"скачиваю {rel.Tag}…";
+            State.SetStatus($"скачиваю {rel.Tag}…", $"downloading {rel.Tag}…");
             var file = await DownloadVerifiedAsync(rel);
-            State.Status = $"{rel.Tag} скачана и проверена (SHA256), устанавливаю…";
+            State.SetStatus($"{rel.Tag} скачана и проверена (SHA256), устанавливаю…", $"{rel.Tag} downloaded and verified (SHA256), installing…");
 
             for (var i = 0; i < 120 && CanApplyNow?.Invoke() == false; i++)
             {
@@ -134,7 +139,7 @@ public sealed class Updater : IDisposable
         }
         catch (Exception ex)
         {
-            State.Status = "не удалось проверить обновления: " + ex.Message;
+            State.SetStatus("не удалось проверить обновления: " + ex.Message, "could not check for updates: " + (ex is LocalizedException le ? le.En : ex.Message));
             Log.Error("update check", ex);
         }
         finally
@@ -148,7 +153,7 @@ public sealed class Updater : IDisposable
         Directory.CreateDirectory(AppPaths.UpdateDir);
         var sumsText = await Http.GetStringAsync(rel.SumsUrl);
         var expected = ExpectedHash(sumsText, AssetName)
-            ?? throw new InvalidOperationException($"в {SumsName} нет строки для {AssetName}");
+            ?? throw new LocalizedException($"в {SumsName} нет строки для {AssetName}", $"{SumsName} has no line for {AssetName}");
 
         var target = Path.Combine(AppPaths.UpdateDir, AssetName);
         using (var resp = await Http.GetAsync(rel.ExeUrl, HttpCompletionOption.ResponseHeadersRead))
@@ -161,7 +166,7 @@ public sealed class Updater : IDisposable
         if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
         {
             File.Delete(target);
-            throw new InvalidOperationException("SHA256 скачанного файла не совпадает с SHA256SUMS.txt");
+            throw new LocalizedException("SHA256 скачанного файла не совпадает с SHA256SUMS.txt", "SHA256 of the downloaded file does not match SHA256SUMS.txt");
         }
         return target;
     }

@@ -101,6 +101,16 @@ public sealed class WebServer : IAsyncDisposable
             s.Processor.RecountAll();
             return Results.Ok();
         });
+        app.MapGet("/api/settings", () => Results.Json(new { lang = Lang.Code }));
+        app.MapPost("/api/settings", (SettingsBody body) =>
+        {
+            if (body.Lang is "ru" or "en")
+            {
+                Lang.Set(s.Db, body.Lang);
+            }
+            return Results.Json(new { lang = Lang.Code });
+        });
+        app.MapGet("/user-font", () => UserFont() is { } f ? Results.File(f.Path, f.Type) : Results.NotFound());
         app.MapPost("/api/update/check", async () =>
         {
             await s.Updater.CheckAsync(manual: true);
@@ -144,6 +154,25 @@ public sealed class WebServer : IAsyncDisposable
             dataDir = AppPaths.DataDir,
             hasMap = typeof(WebServer).Assembly.GetManifestResourceInfo("wwwroot/map.png") != null || File.Exists(Path.Combine(AppPaths.DataDir, "map.png")),
         };
+    }
+
+    public sealed record SettingsBody(string? Lang);
+
+    /// <summary>
+    /// The display font is not shipped (fonts like Fortnite's are licensed). If the user puts their own copy
+    /// next to the data as font.ttf / font.otf / font.woff2 / font.woff, the page uses it for headings and numbers.
+    /// </summary>
+    private static (string Path, string Type)? UserFont()
+    {
+        foreach (var (ext, type) in new[] { ("woff2", "font/woff2"), ("woff", "font/woff"), ("ttf", "font/ttf"), ("otf", "font/otf") })
+        {
+            var p = Path.Combine(AppPaths.DataDir, "font." + ext);
+            if (File.Exists(p))
+            {
+                return (p, type);
+            }
+        }
+        return null;
     }
 
     /// <summary>Embedded file names, normalised to '/' (MSBuild keeps a backslash for sub-folders such as fonts).</summary>

@@ -60,7 +60,8 @@ public sealed class FortniteMonitor : IDisposable
     {
         if (!ps.DemosFound)
         {
-            return "Папка повторов не найдена. Похоже, запись повторов в Fortnite ни разу не включалась.";
+            return Lang.T("Папка повторов не найдена. Похоже, запись повторов в Fortnite ни разу не включалась.",
+                "The replay folder was not found. It looks like replay recording has never been turned on in Fortnite.");
         }
         var last = _db.LastFortniteRun();
         if (last is not { End: { } end } run || end - run.Start < TimeSpan.FromMinutes(8) || DateTime.UtcNow - end < TimeSpan.FromMinutes(2))
@@ -71,7 +72,9 @@ public sealed class FortniteMonitor : IDisposable
         {
             var any = Directory.EnumerateFiles(AppPaths.DemosDir, "*.replay")
                 .Any(f => File.GetLastWriteTimeUtc(f) >= run.Start && File.GetLastWriteTimeUtc(f) <= end.AddMinutes(3));
-            return any ? null : $"Похоже, запись повторов выключена: Fortnite был запущен {run.Start.ToLocalTime():dd.MM HH:mm}–{end.ToLocalTime():HH:mm}, а новых реплеев нет.";
+            return any ? null : Lang.T(
+                $"Похоже, запись повторов выключена: Fortnite был запущен {run.Start.ToLocalTime():dd.MM HH:mm}–{end.ToLocalTime():HH:mm}, а новых реплеев нет.",
+                $"Replay recording seems to be off: Fortnite ran {run.Start.ToLocalTime():dd.MM HH:mm}–{end.ToLocalTime():HH:mm}, but no new replays appeared.");
         }
         catch
         {

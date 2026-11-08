@@ -26,9 +26,9 @@ public sealed class Stats
 
     public static string TypeLabel(string t) => t switch
     {
-        nameof(ChestType.Normal) => "Обычные",
-        nameof(ChestType.Rare) => "Редкие",
-        nameof(ChestType.Sprite) => "Спрайтовые",
+        nameof(ChestType.Normal) => Lang.T("Обычные", "Normal"),
+        nameof(ChestType.Rare) => Lang.T("Редкие", "Rare"),
+        nameof(ChestType.Sprite) => Lang.T("Спрайтовые", "Sprite"),
         _ => t,
     };
 
@@ -89,7 +89,7 @@ public sealed class Stats
                 endedUtc = last.StartedUtc.AddSeconds(last.LengthSec),
                 mine = last.Mine,
                 squad = last.Squad,
-                mode = MatchFilter.ModeLabel(last.Playlist),
+                mode = MatchFilter.ModeLabel(last.Playlist, Lang.En),
             },
             progress = new { busy = ps.Current != null || ps.Pending > 0, current = ps.Current, done = ps.BatchDone, total = ps.BatchTotal, pending = ps.Pending, live = ps.Live },
             version = AppInfo.VersionText,
@@ -142,9 +142,9 @@ public sealed class Stats
             id = m.ReplayId,
             file = m.FileName,
             status = m.Status,
-            skipReason = m.SkipReason,
+            skipReason = Lang.SkipReason(m.SkipReason),
             startedUtc = m.StartedUtc,
-            mode = MatchFilter.ModeLabel(m.Playlist),
+            mode = MatchFilter.ModeLabel(m.Playlist, Lang.En),
             playlist = m.Playlist,
             build = m.Build,
             durationMin = Math.Round(m.LengthSec / 60.0, 1),
@@ -162,7 +162,7 @@ public sealed class Stats
         return _db.Files().Where(f => f.Status is "error" or "live" or "pending").Select(f => new
         {
             file = Path.GetFileName(f.Path),
-            status = f.Status switch { "error" => "ошибка", "live" => "идёт запись", _ => "в очереди" },
+            status = f.Status switch { "error" => Lang.T("ошибка", "error"), "live" => Lang.T("идёт запись", "recording"), _ => Lang.T("в очереди", "queued") },
             error = f.Error,
             build = f.Build,
             attempts = f.Attempts,
@@ -240,16 +240,16 @@ public sealed class Stats
         }
         if (best != null && bestRel <= 2.5)
         {
-            return ("near:" + best.Id, "Рядом с " + best.Name, false);
+            return ("near:" + best.Id, Lang.T("Рядом с ", "Near ") + best.Name, false);
         }
         if (pois.Count > 0 && pois.Min(p => Math.Sqrt((p.X - x) * (p.X - x) + (p.Y - y) * (p.Y - y))) > 60000)
         {
-            return ("none", "Не высадился", false); // e.g. left on the pre-game island: not a drop spot
+            return ("none", Lang.T("Не высадился", "Did not land"), false); // e.g. left on the pre-game island: not a drop spot
         }
         const double cell = 30000;
         var cx = Math.Round(x / cell);
         var cy = Math.Round(y / cell);
-        return ($"cell:{cx}:{cy}", $"Район ({cx * cell / 100:0}, {cy * cell / 100:0}) м", false);
+        return ($"cell:{cx}:{cy}", Lang.T($"Район ({cx * cell / 100:0}, {cy * cell / 100:0}) м", $"Area ({cx * cell / 100:0}, {cy * cell / 100:0}) m"), false);
     }
 
     public object Efficiency()
@@ -264,7 +264,7 @@ public sealed class Stats
             {
                 id = m.ReplayId,
                 startedUtc = m.StartedUtc,
-                mode = MatchFilter.ModeLabel(m.Playlist),
+                mode = MatchFilter.ModeLabel(m.Playlist, Lang.En),
                 mine = m.Mine,
                 minutes = Math.Round(minutes, 1),
                 cpm = minutes > 0.5 ? Math.Round(m.Mine / minutes, 2) : (double?)null,

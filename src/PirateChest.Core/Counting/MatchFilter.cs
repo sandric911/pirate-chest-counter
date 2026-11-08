@@ -54,19 +54,24 @@ public sealed class MatchFilter
     }
 
     /// <summary>Short Russian label for a playlist.</summary>
-    public static string ModeLabel(string? playlist)
+    public static string ModeLabel(string? playlist) => ModeLabel(playlist, english: false);
+
+    /// <summary>Short label for a playlist, in Russian or English.</summary>
+    public static string ModeLabel(string? playlist, bool english)
     {
         if (string.IsNullOrEmpty(playlist))
         {
             return "—";
         }
+        bool Ends(params string[] s) => s.Any(x => playlist.EndsWith(x, StringComparison.OrdinalIgnoreCase));
         var nb = playlist.Contains("NoBuild", StringComparison.OrdinalIgnoreCase);
-        var size = playlist.EndsWith("Solo", StringComparison.OrdinalIgnoreCase) ? "соло"
-            : playlist.EndsWith("Duo", StringComparison.OrdinalIgnoreCase) || playlist.EndsWith("Duos", StringComparison.OrdinalIgnoreCase) ? "дуо"
-            : playlist.EndsWith("Trio", StringComparison.OrdinalIgnoreCase) || playlist.EndsWith("Trios", StringComparison.OrdinalIgnoreCase) ? "трио"
-            : playlist.EndsWith("Squad", StringComparison.OrdinalIgnoreCase) || playlist.EndsWith("Squads", StringComparison.OrdinalIgnoreCase) ? "отряды"
+        var size = Ends("Solo") ? (english ? "solo" : "соло")
+            : Ends("Duo", "Duos") ? (english ? "duos" : "дуо")
+            : Ends("Trio", "Trios") ? (english ? "trios" : "трио")
+            : Ends("Squad", "Squads") ? (english ? "squads" : "отряды")
             : playlist.Replace("Playlist_", "");
         var ranked = playlist.Contains("Habanero", StringComparison.OrdinalIgnoreCase) || playlist.Contains("Showdown", StringComparison.OrdinalIgnoreCase);
-        return $"{(nb ? "Zero Build" : "Королевская битва")}{(ranked ? " (рейтинг)" : "")}, {size}";
+        var mode = nb ? "Zero Build" : english ? "Battle Royale" : "Королевская битва";
+        return $"{mode}{(ranked ? (english ? " (ranked)" : " (рейтинг)") : "")}, {size}";
     }
 }

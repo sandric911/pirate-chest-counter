@@ -102,6 +102,13 @@ public class FilterAndAnalyzerTests
     }
 
     [Fact]
+    public void ModeLabels_InEnglish()
+    {
+        Assert.Equal("Zero Build, squads", MatchFilter.ModeLabel("Playlist_NoBuildBR_Squad", english: true));
+        Assert.Equal("Battle Royale (ranked), duos", MatchFilter.ModeLabel("Playlist_Habanero_Duos", english: true));
+    }
+
+    [Fact]
     public void Atlas_LearnsStaticChestLocationFromOpeners_AndRejectsOutliers()
     {
         var atlas = new ChestAtlas();

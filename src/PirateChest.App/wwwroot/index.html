@@ -18,19 +18,16 @@
   </svg>
 
   <header class="top">
-    <a class="brand" href="#/"><img src="/icon.png" alt=""><span>Счётчик сундуков</span></a>
+    <a class="brand" href="#/"><img src="/icon.png" alt=""><span data-t="brand">Счётчик сундуков</span></a>
     <nav class="tabs" id="tabs">
-      <a href="#/" data-tab="">Главная</a>
-      <a href="#/history" data-tab="history">История</a>
-      <a href="#/efficiency" data-tab="efficiency">Эффективность</a>
-      <a href="#/map" data-tab="map">Карта</a>
-      <a href="#/updates" data-tab="updates">Обновления</a>
+      <a href="#/" data-tab="" data-t="tabHome">Главная</a>
+      <a href="#/history" data-tab="history" data-t="tabHistory">История</a>
+      <a href="#/efficiency" data-tab="efficiency" data-t="tabEfficiency">Эффективность</a>
+      <a href="#/map" data-tab="map" data-t="tabMap">Карта</a>
+      <a href="#/updates" data-tab="updates" data-t="tabUpdates">Обновления</a>
     </nav>
-    <div class="spacer"></div>
-    <div class="chip" id="chip" title="Мои сундуки"><img src="/img/chest.webp" alt=""><span id="chipValue">—</span></div>
-    <div class="ver" id="ver"></div>
   </header>
-  <main id="view"><div class="loading">Загрузка…</div></main>
+  <main id="view"><div class="loading">…</div></main>
   <div class="tip" id="tip"></div>
   <script src="/app.js"></script>
 </body>
