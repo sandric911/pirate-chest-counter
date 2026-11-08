@@ -115,6 +115,13 @@ internal static class Program
         exitEvent.Reset();
         var openBrowser = !background && Environment.GetEnvironmentVariable("PCC_NO_BROWSER") != "1";
         using var tray = new TrayApp(services, web.Url, openBrowser, exitEvent);
+        if (updated)
+        {
+            Log.Info($"running updated version {AppInfo.VersionText}");
+            var t = new System.Windows.Forms.Timer { Interval = 3000 };
+            t.Tick += (_, _) => { t.Stop(); t.Dispose(); tray.ShowUpdated(); };
+            t.Start();
+        }
         Application.Run(tray);
 
         Log.Info("exit");

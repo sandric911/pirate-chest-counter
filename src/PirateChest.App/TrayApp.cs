@@ -150,6 +150,9 @@ public sealed class TrayApp : ApplicationContext
         }
     }
 
+    /// <summary>Shown after a self-update so the user knows the new version is running.</summary>
+    public void ShowUpdated() => Notify("Программа обновлена", $"Pirate Chest Counter {AppInfo.VersionText} установлен автоматически.");
+
     private void Notify(string title, string text)
     {
         _icon.BalloonTipTitle = title;
