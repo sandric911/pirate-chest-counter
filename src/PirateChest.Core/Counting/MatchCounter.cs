@@ -42,6 +42,12 @@ public sealed class CountingOptions
     /// <summary>Dynamic chests (buried, relic) get a new NetGUID each time they re-enter relevancy;
     /// spawns of the same class closer than this (XY, Unreal units) are the same chest.</summary>
     public double DynamicSameChestUnits { get; set; } = 300;
+    /// <summary>
+    /// In v43 the game periodically resets opened chests (they close and can be searched again). When true, every
+    /// real search counts — also a second search of the same chest after such a reset. A chest that merely
+    /// re-enters relevancy already open is never counted again either way.
+    /// </summary>
+    public bool CountReopenedAfterReset { get; set; } = true;
     /// <summary>Unreal units per meter.</summary>
     public const double UnitsPerMeter = 100;
 }
@@ -126,7 +132,6 @@ public sealed class MatchCounter
         public uint SearchCount;
         public uint? Pawn;
         public int? Tier;
-        public bool Treasure;
         public bool Credited;
         public bool Foreign;
         public bool Destroyed;
@@ -148,10 +153,14 @@ public sealed class MatchCounter
         var run = new Run { Resolver = new PlayerResolver(trace) };
         var keys = AssignKeys(trace);
         var chests = new Dictionary<string, ChestState>();
-        var treasureSources = trace.ContainerEvents
-            .Where(e => e.SourceContainer is > 0 && _classifier.RoleOf(e.ClassName, out _) == ContainerRole.TreasureMarker)
-            .Select(e => e.SourceContainer!.Value)
-            .ToHashSet();
+        // Unknown chest-like classes are not counted, but reported so a new chest kind is noticed after an update.
+        foreach (var e in trace.ContainerEvents)
+        {
+            if (e.AlreadySearched == true && !_classifier.IsKnown(e.ClassName) && e.ClassName.Contains("Chest", StringComparison.OrdinalIgnoreCase))
+            {
+                run.Result.UnknownChestClasses.Add(e.ClassName);
+            }
+        }
 
         foreach (var e in trace.ContainerEvents)
         {
@@ -163,10 +172,6 @@ public sealed class MatchCounter
             {
                 st = new ChestState { Key = key, ClassName = e.ClassName };
                 chests[key] = st;
-            }
-            if (treasureSources.Contains(e.ActorId))
-            {
-                st.Treasure = true;
             }
 
             // A pending search that was not followed by destruction in time is a plain open.
@@ -201,10 +206,6 @@ public sealed class MatchCounter
             if (st.Pending != null)
             {
                 Resolve(st, CountKind.Opened, st.Pending, run);
-            }
-            if (!_classifier.IsKnown(st.ClassName) && (st.Credited || st.SearchCount > 0))
-            {
-                run.Result.UnknownChestClasses.Add(st.ClassName);
             }
         }
 
@@ -303,6 +304,14 @@ public sealed class MatchCounter
             {
                 st.Destroyed = true;
             }
+            // The initial bunch carries the full state: a field that is absent has its default value. So a chest that
+            // comes back unopened was reset while out of view, and its search counter started over.
+            st.Searched = e.AlreadySearched == true;
+            st.SearchCount = e.SearchCount ?? 0;
+            if (e.SearchingPawn is null)
+            {
+                st.Pawn = null;
+            }
             _ = firstSight;
             return;
         }
@@ -382,15 +391,19 @@ public sealed class MatchCounter
     {
         if (st.Credited)
         {
-            run.Result.ReopenedAfterReset++; // rule 2: once per match
-            return;
+            // A new search of a chest that was already credited in this match: only possible after the game reset it.
+            run.Result.ReopenedAfterReset++;
+            if (!_options.CountReopenedAfterReset)
+            {
+                return;
+            }
         }
         st.Credited = true;
         run.Result.Credits.Add(new ChestCredit
         {
             ChestKey = st.Key,
             ClassName = st.ClassName,
-            Type = _classifier.TypeOf(st.ClassName, st.Tier, st.Treasure),
+            Type = _classifier.TypeOf(st.ClassName, st.Tier),
             LootTier = st.Tier,
             Kind = kind,
             By = who,
@@ -440,7 +453,7 @@ public sealed class MatchCounter
             {
                 ChestKey = st.Key,
                 ClassName = st.ClassName,
-                Type = _classifier.TypeOf(st.ClassName, st.Tier, st.Treasure),
+                Type = _classifier.TypeOf(st.ClassName, st.Tier),
                 LootTier = st.Tier,
                 Kind = CountKind.BrokenUnopened,
                 By = w,

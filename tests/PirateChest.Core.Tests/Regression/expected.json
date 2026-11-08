@@ -5,9 +5,9 @@
     "MineBroken": 5,
     "MineHeuristic": 0,
     "BrokenAfterOpen": 1,
-    "Treasure": 0,
+    "Normal": 6,
     "Rare": 2,
-    "Other": 0
+    "Sprite": 0
   },
   "match2.json.gz": {
     "Mine": 19,
@@ -15,29 +15,29 @@
     "MineBroken": 4,
     "MineHeuristic": 0,
     "BrokenAfterOpen": 0,
-    "Treasure": 0,
+    "Normal": 19,
     "Rare": 0,
-    "Other": 0
+    "Sprite": 0
   },
   "match3.json.gz": {
-    "Mine": 26,
-    "Squad": 56,
+    "Mine": 27,
+    "Squad": 57,
     "MineBroken": 8,
     "MineHeuristic": 0,
     "BrokenAfterOpen": 3,
-    "Treasure": 1,
-    "Rare": 0,
-    "Other": 1
+    "Normal": 25,
+    "Rare": 1,
+    "Sprite": 1
   },
   "match4.json.gz": {
-    "Mine": 54,
-    "Squad": 78,
+    "Mine": 55,
+    "Squad": 79,
     "MineBroken": 5,
     "MineHeuristic": 0,
     "BrokenAfterOpen": 8,
-    "Treasure": 0,
+    "Normal": 43,
     "Rare": 10,
-    "Other": 2
+    "Sprite": 2
   },
   "match5.json.gz": {
     "Mine": 12,
@@ -45,18 +45,18 @@
     "MineBroken": 5,
     "MineHeuristic": 0,
     "BrokenAfterOpen": 0,
-    "Treasure": 0,
+    "Normal": 12,
     "Rare": 0,
-    "Other": 0
+    "Sprite": 0
   },
   "match6.json.gz": {
-    "Mine": 26,
-    "Squad": 46,
-    "MineBroken": 16,
+    "Mine": 28,
+    "Squad": 48,
+    "MineBroken": 17,
     "MineHeuristic": 0,
-    "BrokenAfterOpen": 9,
-    "Treasure": 0,
+    "BrokenAfterOpen": 8,
+    "Normal": 27,
     "Rare": 1,
-    "Other": 0
+    "Sprite": 0
   }
 }

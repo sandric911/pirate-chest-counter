@@ -150,7 +150,7 @@ public class CountingRulesTests
         b.AppearDynamic(200, "B_Athena_BuriedChest_Chest_C", 5050, 4980, searched: true, pawn: MyPawn);
         var c = Count(b);
         Assert.Equal(1, c.Mine);
-        Assert.Equal(ChestType.Other, c.Credits.Single().Type);
+        Assert.Equal(ChestType.Normal, c.Credits.Single().Type); // buried chests count as normal
     }
 
     [Fact]
@@ -164,13 +164,48 @@ public class CountingRulesTests
         Assert.Equal(2, Count(b).Mine);
     }
 
-    [Fact]
-    public void ResetByGameAndReopenedByMe_StillCountsOnce()
+    [Theory]
+    [InlineData(true, 2)]
+    [InlineData(false, 1)]
+    public void ResetByGameAndReopenedByMe(bool countReopened, int expectedMine)
     {
         var b = new TraceBuilder().Appear(10, "A").Open(60, "A", MyPawn).Reset(300, "A").Open(320, "A", MyPawn);
-        var c = Count(b);
-        Assert.Equal(1, c.Mine);
+        var c = new MatchCounter(options: new CountingOptions { CountReopenedAfterReset = countReopened }).Count(b.Build());
+        Assert.Equal(expectedMine, c.Mine);
         Assert.Equal(1, c.ReopenedAfterReset);
+    }
+
+    [Fact]
+    public void ResetWhileOutOfView_ThenIOpen_CountsForMe()
+    {
+        // A stranger opens it, the chest leaves relevancy, the game resets it unseen; it comes back closed and I open it.
+        var b = new TraceBuilder().Appear(10, "A").Open(60, "A", OtherPawn)
+            .Close(100, "A", CloseReason.Relevancy)
+            .Appear(400, "A")
+            .Update(420, "A", "Tiered_Chest_Athena_C", e => { e.AlreadySearched = true; e.SearchCount = 1; });
+        // SearchingPawn is unchanged on the wire only if the same pawn searches; here I do, so it is sent.
+        b.Build().ContainerEvents[^1].SearchingPawn = MyPawn;
+        Assert.Equal(1, Count(b).Mine);
+    }
+
+    [Theory]
+    [InlineData(true, 1, 2)]
+    [InlineData(false, 0, 1)]
+    public void TeammateOpened_ResetByGame_ThenIOpen(bool countReopened, int expectedMine, int expectedSquad)
+    {
+        var b = new TraceBuilder().Appear(10, "A").Open(60, "A", MatePawn).Reset(300, "A").Open(320, "A", MyPawn);
+        var c = new MatchCounter(options: new CountingOptions { CountReopenedAfterReset = countReopened }).Count(b.Build());
+        Assert.Equal(expectedMine, c.Mine);
+        Assert.Equal(expectedSquad, c.MineAndSquad);
+    }
+
+    [Fact]
+    public void ReenteringOpen_IsNeverASecondSearch_EvenWithReopenCounting()
+    {
+        var b = new TraceBuilder().Appear(10, "A").Open(60, "A", MyPawn)
+            .Close(100, "A", CloseReason.Relevancy).Appear(200, "A", searched: true, pawn: MyPawn)
+            .Close(300, "A", CloseReason.Relevancy).Appear(400, "A", searched: true, pawn: MyPawn);
+        Assert.Equal(1, new MatchCounter(options: new CountingOptions { CountReopenedAfterReset = true }).Count(b.Build()).Mine);
     }
 
     [Fact]
@@ -289,8 +324,10 @@ public class CountingRulesTests
     [InlineData("AlwaysSpawn_NormalChest_C", 0, ChestType.Normal)]
     [InlineData("AlwaysSpawn_RareChest_C", 2, ChestType.Rare)]
     [InlineData("AlwaysSpawn_RareChest_C", 0, ChestType.Rare)]
-    [InlineData("B_TieredChest_Relics_C", 0, ChestType.Other)]
-    [InlineData("Some_New_Chest_C", 0, ChestType.Other)]
+    [InlineData("B_TieredChest_Relics_C", 0, ChestType.Sprite)]
+    [InlineData("B_Delilah_TieredChest_Relics_Variant1_C", 0, ChestType.Sprite)]
+    [InlineData("B_SpritePosters_Booty_Chest_C", 0, ChestType.Sprite)]
+    [InlineData("B_Athena_BuriedChest_Chest_C", 0, ChestType.Normal)]
     public void ChestTypes(string cls, int tier, ChestType expected)
     {
         var c = Count(new TraceBuilder().Appear(10, "A", cls, tier: tier).Open(60, "A", MyPawn, cls));
@@ -298,22 +335,22 @@ public class CountingRulesTests
     }
 
     [Fact]
-    public void UnknownChestClass_IsCountedAndReported()
+    public void UnknownChestClass_IsIgnoredButReported()
     {
         var c = Count(new TraceBuilder().Appear(10, "A", "Some_New_Chest_C").Open(60, "A", MyPawn, "Some_New_Chest_C"));
-        Assert.Equal(1, c.Mine);
+        Assert.Equal(0, c.Mine);
         Assert.Contains("Some_New_Chest_C", c.UnknownChestClasses);
     }
 
     [Fact]
-    public void TreasureHuntMarker_MakesSourceChestTreasureHunt_AndIsNotCountedItself()
+    public void TreasureHuntMarker_IsNotCountedAndDoesNotChangeTheChest()
     {
         var b = new TraceBuilder().Appear(10, "A").TreasureMarker(59, "A", MyPawn)
             .Update(59.2f, "A", "Tiered_Chest_Athena_C", e => e.LootTier = 2)
             .Open(60, "A", MyPawn);
         var c = Count(b);
         Assert.Equal(1, c.Mine);
-        Assert.Equal(ChestType.TreasureHunt, c.Credits.Single().Type);
+        Assert.Equal(ChestType.Rare, c.Credits.Single().Type);
     }
 
     // --- Mixed scenario ---------------------------------------------------------------------

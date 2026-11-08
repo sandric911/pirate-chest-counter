@@ -25,10 +25,10 @@ public sealed class Stats
 
     public static string TypeLabel(string t) => t switch
     {
-        nameof(ChestType.Normal) => "Обычный",
-        nameof(ChestType.Rare) => "Редкий",
-        nameof(ChestType.TreasureHunt) => "Treasure Hunt",
-        _ => "Другой",
+        nameof(ChestType.Normal) => "Обычные",
+        nameof(ChestType.Rare) => "Редкие",
+        nameof(ChestType.Sprite) => "Спрайтовые",
+        _ => t,
     };
 
     /// <summary>Matches whose mode could not be determined (30-second leftovers etc.) are not shown anywhere.</summary>
@@ -48,7 +48,7 @@ public sealed class Stats
         var todayIds = counted.Where(m => Local(m.StartedUtc).Date == today).Select(m => m.ReplayId).ToHashSet();
         var sessionIds = CurrentSession(counted).Select(m => m.ReplayId).ToHashSet();
 
-        var types = new[] { nameof(ChestType.Normal), nameof(ChestType.Rare), nameof(ChestType.TreasureHunt), nameof(ChestType.Other) };
+        var types = new[] { nameof(ChestType.Normal), nameof(ChestType.Rare), nameof(ChestType.Sprite) };
         var last = counted.LastOrDefault();
 
         return new

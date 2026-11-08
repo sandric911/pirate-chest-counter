@@ -119,8 +119,8 @@ h3 { font-size: 17px; margin: 0 0 8px; color: #e6eaff; display: flex; align-item
 .stat .k { font-size: 13px; opacity: .9; }
 .row { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-end; }
 
-.types { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-@media (max-width: 900px) { .types { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.types { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .types { grid-template-columns: 1fr; } }
 .types .tile { padding: 14px 14px 12px; text-align: center; }
 .types .tile .ico { width: 44px; height: 44px; --ia: rgba(0, 0, 0, .55); }
 .types .tile .t { font-family: var(--display); font-weight: 900; text-transform: uppercase; font-size: 18px; margin-top: 4px; }

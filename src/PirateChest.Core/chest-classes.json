@@ -1,19 +1,20 @@
-// Container classes seen in v43.00 replays (Crossbones Isle). First match wins.
-// Role: Chest | TreasureMarker | Ignored.  Type: Normal | Rare | TreasureHunt | Other.
+// Container classes seen in v43 replays (Crossbones Isle). First match wins; anything not listed is ignored.
+// Role: Chest | Ignored.  Type: Normal | Rare | Sprite.
 [
   { "match": "Tiered_Chest_Athena_C",                    "role": "Chest", "type": "Normal", "rareFromTier": 2 },
   { "match": "AlwaysSpawn_NormalChest_C",                "role": "Chest", "type": "Normal", "rareFromTier": 2 },
   { "match": "AlwaysSpawn_RareChest_C",                  "role": "Chest", "type": "Rare" },
   { "match": "Tiered_Chest_5_Child_C",                   "role": "Chest", "type": "Normal", "rareFromTier": 2 },
-  { "match": "B_TieredChest_Relics_C",                   "role": "Chest", "type": "Other" },
-  { "match": "B_Delilah_TieredChest_Relics_*",           "role": "Chest", "type": "Other" },
-  { "match": "B_Athena_BuriedChest_Chest_C",             "role": "Chest", "type": "Other" },
-  { "match": "B_Athena_BuriedChest_RelicFinder_C",       "role": "Chest", "type": "Other" },
-  { "match": "B_SpritePosters_Booty_Chest*",             "role": "Chest", "type": "Other" },
+  { "match": "B_Athena_BuriedChest_Chest_C",             "role": "Chest", "type": "Normal" },
+
+  // Sprite chests: relic chests and the buried "booty" chests of the SpritePosters feature.
+  { "match": "B_TieredChest_Relics_C",                   "role": "Chest", "type": "Sprite" },
+  { "match": "B_Delilah_TieredChest_Relics_*",           "role": "Chest", "type": "Sprite" },
+  { "match": "B_SpritePosters_Booty_Chest*",             "role": "Chest", "type": "Sprite" },
+  { "match": "B_Athena_BuriedChest_RelicFinder_C",       "role": "Chest", "type": "Sprite" },
+
   { "match": "Creative_Tiered_Chest_C",                  "role": "Ignored" },
-
-  { "match": "BGA_DelilahTreasureHuntAnimatedChest_C",   "role": "TreasureMarker", "type": "TreasureHunt" },
-
+  { "match": "BGA_DelilahTreasureHuntAnimatedChest_C",   "role": "Ignored" },
   { "match": "Tiered_Ammo_Athena_C",                     "role": "Ignored" },
   { "match": "FoodBox_*",                                "role": "Ignored" },
   { "match": "Barrel_*",                                 "role": "Ignored" },

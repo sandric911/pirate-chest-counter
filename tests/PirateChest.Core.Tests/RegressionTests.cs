@@ -15,7 +15,7 @@ public class RegressionTests
     private static readonly JsonSerializerOptions Json = new() { Converters = { new JsonStringEnumConverter() }, WriteIndented = true };
     private static string Dir => Path.Combine(AppContext.BaseDirectory, "Regression");
 
-    public sealed record Expected(int Mine, int Squad, int MineBroken, int MineHeuristic, int BrokenAfterOpen, int Treasure, int Rare, int Other);
+    public sealed record Expected(int Mine, int Squad, int MineBroken, int MineHeuristic, int BrokenAfterOpen, int Normal, int Rare, int Sprite);
 
     public static IEnumerable<object[]> Matches() =>
         Directory.GetFiles(Dir, "match*.json.gz").Select(f => new object[] { Path.GetFileName(f) }).OrderBy(x => (string)x[0]);
@@ -33,7 +33,7 @@ public class RegressionTests
         var c = s.Count;
         var mine = c.Credits.Where(x => x.By == Who.Me).ToList();
         return new Expected(c.Mine, c.MineAndSquad, c.MineBroken, c.MineHeuristic, c.BrokenAfterOpen,
-            mine.Count(x => x.Type == ChestType.TreasureHunt), mine.Count(x => x.Type == ChestType.Rare), mine.Count(x => x.Type == ChestType.Other));
+            mine.Count(x => x.Type == ChestType.Normal), mine.Count(x => x.Type == ChestType.Rare), mine.Count(x => x.Type == ChestType.Sprite));
     }
 
     [Theory]
@@ -65,19 +65,12 @@ public class RegressionTests
     public void RealMatch_Invariants(string file)
     {
         var t = Load(file);
-        var c = new MatchCounter().Count(t);
-        // Never more than one credit per chest.
+        var c = new MatchCounter(options: new CountingOptions { CountReopenedAfterReset = false }).Count(t);
+        // With strict counting, never more than one credit per chest.
         Assert.Equal(c.Credits.Count, c.Credits.Select(x => x.ChestKey).Distinct().Count());
         // Squad counter is never below mine.
         Assert.True(c.MineAndSquad >= c.Mine);
         // Only chests are credited.
         Assert.All(c.Credits, x => Assert.Equal(ContainerRole.Chest, ChestClassifier.Default.RoleOf(x.ClassName, out _)));
-    }
-
-    [Fact]
-    public void TreasureHuntMatch_HasTheTreasureChest()
-    {
-        var e = Measure(Load("match3.json.gz"));
-        Assert.Equal(1, e.Treasure);
     }
 }

@@ -150,8 +150,7 @@ function progressBanner(p) {
 const TYPES = {
   Normal: { tile: 't-uncommon', icon: 'chest' },
   Rare: { tile: 't-rare', icon: 'star' },
-  TreasureHunt: { tile: 't-legend', icon: 'skull' },
-  Other: { tile: 't-epic', icon: 'gem' },
+  Sprite: { tile: 't-epic', icon: 'sprite' },
 };
 
 async function renderHome() {

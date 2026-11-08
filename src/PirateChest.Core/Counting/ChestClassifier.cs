@@ -5,23 +5,19 @@ namespace PirateChest.Core.Counting;
 
 public enum ChestType
 {
-    /// <summary>Обычный.</summary>
+    /// <summary>Обычный (включая закопанные).</summary>
     Normal,
     /// <summary>Редкий.</summary>
     Rare,
-    /// <summary>Treasure Hunt (золотой, с черепом).</summary>
-    TreasureHunt,
-    /// <summary>Другой (закопанный, реликвийный и т.п.).</summary>
-    Other,
+    /// <summary>Спрайтовый: реликвийные и Booty-сундуки из набора SpritePosters.</summary>
+    Sprite,
 }
 
 public enum ContainerRole
 {
     /// <summary>A chest that counts.</summary>
     Chest,
-    /// <summary>Treasure Hunt animated chest: marks its SourceContainer as Treasure Hunt, never counted itself.</summary>
-    TreasureMarker,
-    /// <summary>Ammo boxes, food boxes, props, gameplay actors: never counted.</summary>
+    /// <summary>Ammo boxes, food boxes, props, gameplay actors and any unknown class: never counted.</summary>
     Ignored,
 }
 
@@ -69,32 +65,21 @@ public sealed class ChestClassifier
         return new ChestClassifier(rules);
     }
 
-    /// <summary>
-    /// Role of a class. Unknown classes whose name contains "Chest" are treated as chests of type
-    /// Other (they only ever count if a real search event happens on them); everything else is ignored.
-    /// </summary>
+    /// <summary>Role of a class. Only classes listed in chest-classes.json count; anything unknown is ignored.</summary>
     public ContainerRole RoleOf(string className, out ChestClassRule? rule)
     {
         rule = _rules.FirstOrDefault(r => r.Matches(className));
-        if (rule != null)
-        {
-            return rule.Role;
-        }
-        return className.Contains("Chest", StringComparison.OrdinalIgnoreCase) ? ContainerRole.Chest : ContainerRole.Ignored;
+        return rule?.Role ?? ContainerRole.Ignored;
     }
 
     public bool IsKnown(string className) => _rules.Any(r => r.Matches(className));
 
-    public ChestType TypeOf(string className, int? lootTier, bool treasure)
+    public ChestType TypeOf(string className, int? lootTier)
     {
-        if (treasure)
-        {
-            return ChestType.TreasureHunt;
-        }
         RoleOf(className, out var rule);
         if (rule == null)
         {
-            return ChestType.Other;
+            return ChestType.Normal;
         }
         if (rule.RareFromTier is { } t && lootTier >= t)
         {
