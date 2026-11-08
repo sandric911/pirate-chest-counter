@@ -8,6 +8,21 @@
 
 Репозиторий: `https://github.com/sandric911/pirate-chest-counter`
 
+## Быстрый путь (рекомендуется)
+
+Скрипт [`install.ps1`](install.ps1) делает шаги 1–4 ниже сам: проверка Windows 11 x64, скачивание последнего
+релиза только с github.com, сверка SHA256, `--install`, `--doctor`. Скачай его, прочитай и запусти:
+
+```powershell
+$ps1 = Join-Path $env:TEMP 'pcc-install.ps1'
+Invoke-WebRequest 'https://raw.githubusercontent.com/sandric911/pirate-chest-counter/main/install.ps1' -OutFile $ps1 -UseBasicParsing
+Get-Content $ps1 -Encoding UTF8 | Select-Object -First 60   # прочитай, что он делает
+powershell -NoProfile -ExecutionPolicy Bypass -File $ps1
+```
+
+Затем перескажи человеку отчёт `--doctor` (шаг 4) и, если нужно, объясни про запись повторов (шаг 5).
+Если быстрый путь не сработал — сделай шаги вручную.
+
 ## 1. Проверь систему
 
 ```powershell

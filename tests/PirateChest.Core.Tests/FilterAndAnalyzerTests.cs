@@ -79,6 +79,22 @@ public class FilterAndAnalyzerTests
     }
 
     [Fact]
+    public void Landing_IgnoresJumpsOnThePreGameIsland()
+    {
+        var b = new TraceBuilder();
+        // pre-game island: launch pad jump (20 m), then the bus drop from 600 m
+        b.Pawn(TraceBuilder.MyPawn, 5, 9000, 15000).Pawn(TraceBuilder.MyPawn, 10, 9000, 15000, inAir: true);
+        var t = b.Build();
+        t.PawnSamples[^1].Z = 2000;
+        b.Pawn(TraceBuilder.MyPawn, 12, 9001, 15001);
+        b.Pawn(TraceBuilder.MyPawn, 40, 100, 50, inAir: true);
+        t.PawnSamples[^1].Z = 60000;
+        b.Pawn(TraceBuilder.MyPawn, 70, 120, 60);
+        var landing = MatchAnalyzer.FindLanding(t.PawnSamples);
+        Assert.Equal(70, landing.Time);
+    }
+
+    [Fact]
     public void ModeLabels_AreRussian()
     {
         Assert.Equal("Zero Build, отряды", MatchFilter.ModeLabel("Playlist_NoBuildBR_Squad"));

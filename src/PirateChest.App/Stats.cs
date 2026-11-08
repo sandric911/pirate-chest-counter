@@ -31,9 +31,12 @@ public sealed class Stats
         _ => "Другой",
     };
 
+    /// <summary>Matches whose mode could not be determined (30-second leftovers etc.) are not shown anywhere.</summary>
+    public static bool IsHidden(MatchRow m) => m.Status == "skipped" && string.IsNullOrEmpty(m.Playlist);
+
     public object Summary(ProcessorStatus ps)
     {
-        var matches = _db.Matches();
+        var matches = _db.Matches().Where(m => !IsHidden(m)).ToList();
         var counted = matches.Where(m => m.Status == "counted").ToList();
         var credits = _db.Credits();
         var countedIds = counted.Select(m => m.ReplayId).ToHashSet();
@@ -61,7 +64,8 @@ public sealed class Stats
                 mine = mine.Count(c => c.Type == t),
                 squad = squad.Count(c => c.Type == t),
             }),
-            broken = new { mine = mine.Count(c => c.Kind == nameof(CountKind.BrokenUnopened)), squad = squad.Count(c => c.Kind == nameof(CountKind.BrokenUnopened)) },
+            best = counted.Count > 0 ? counted.Max(m => m.Mine) : 0,
+            perMatch = counted.Count > 0 ? Math.Round(counted.Average(m => m.Mine), 1) : 0,
             heuristic = new { mine = mine.Count(c => c.Method == nameof(Attribution.Heuristic)), squad = squad.Count(c => c.Method == nameof(Attribution.Heuristic)) },
             matches = counted.Count,
             skipped = matches.Count(m => m.Status == "skipped"),
@@ -107,7 +111,7 @@ public sealed class Stats
 
     public object MatchList()
     {
-        var matches = _db.Matches();
+        var matches = _db.Matches().Where(m => !IsHidden(m)).ToList();
         return matches.OrderByDescending(m => m.StartedUtc).Select(m => new
         {
             id = m.ReplayId,
@@ -121,8 +125,6 @@ public sealed class Stats
             durationMin = Math.Round(m.LengthSec / 60.0, 1),
             mine = m.Mine,
             squad = m.Squad,
-            mineBroken = m.MineBroken,
-            squadBroken = m.SquadBroken,
             mineHeuristic = m.MineHeuristic,
             squadHeuristic = m.SquadHeuristic,
             placement = m.Placement,
@@ -193,23 +195,31 @@ public sealed class Stats
         _db.Set("poi_names", JsonSerializer.Serialize(map));
     }
 
-    /// <summary>Nearest POI within its radius, otherwise a 300 m grid cluster.</summary>
+    /// <summary>POI whose radius covers the point; else "рядом с POI" within 2.5 radii; else a 300 m grid district.</summary>
     public static (string Id, string Name, bool IsPoi) PlaceOf(double x, double y, List<Poi> pois)
     {
         Poi? best = null;
-        var bestD = double.MaxValue;
+        var bestRel = double.MaxValue;
         foreach (var p in pois)
         {
-            var d = Math.Sqrt((p.X - x) * (p.X - x) + (p.Y - y) * (p.Y - y));
-            if (d <= p.R && d < bestD)
+            var rel = Math.Sqrt((p.X - x) * (p.X - x) + (p.Y - y) * (p.Y - y)) / Math.Max(1, p.R);
+            if (rel < bestRel)
             {
                 best = p;
-                bestD = d;
+                bestRel = rel;
             }
         }
-        if (best != null)
+        if (best != null && bestRel <= 1)
         {
             return (best.Id, best.Name, true);
+        }
+        if (best != null && bestRel <= 2.5)
+        {
+            return ("near:" + best.Id, "Рядом с " + best.Name, false);
+        }
+        if (pois.Count > 0 && pois.Min(p => Math.Sqrt((p.X - x) * (p.X - x) + (p.Y - y) * (p.Y - y))) > 60000)
+        {
+            return ("none", "Не высадился", false); // e.g. left on the pre-game island: not a drop spot
         }
         const double cell = 30000;
         var cx = Math.Round(x / cell);
@@ -224,7 +234,7 @@ public sealed class Stats
         var rows = counted.Select(m =>
         {
             var minutes = m.LandingTime is { } l && m.ActiveEnd is { } e && e > l ? (e - l) / 60.0 : 0;
-            var place = m.LandingX is { } x && m.LandingY is { } y ? PlaceOf(x, y, pois) : ("none", "Неизвестно", false);
+            var place = m.LandingX is { } x && m.LandingY is { } y ? PlaceOf(x, y, pois) : ("none", "—", false);
             return new
             {
                 id = m.ReplayId,
@@ -283,7 +293,6 @@ public sealed class Stats
             x = Math.Round(c.X!.Value),
             y = Math.Round(c.Y!.Value),
             by = c.By == nameof(Who.Me) ? "me" : "squad",
-            broken = c.Kind == nameof(CountKind.BrokenUnopened),
             heur = c.Method == nameof(Attribution.Heuristic),
             type = c.Type,
         });

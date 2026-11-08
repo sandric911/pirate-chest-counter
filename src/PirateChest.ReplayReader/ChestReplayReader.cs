@@ -20,7 +20,7 @@ namespace PirateChest.ReplayReader;
 /// </summary>
 public class ChestReplayReader : FortniteReplayReader.ReplayReader
 {
-    public const string ParserVersion = "1";
+    public const string ParserVersion = "2";
 
     private readonly NetBitReader _cmd = new();
     private float _time;
@@ -33,7 +33,8 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
     private readonly Dictionary<uint, uint> _pawnToState = new();
     private readonly Dictionary<uint, TracePlayer> _players = new();
     private readonly Dictionary<uint, List<PawnSample>> _samples = new();
-    private readonly Dictionary<uint, bool> _pawnInAir = new();
+    private readonly Dictionary<uint, bool> _pawnSkydiving = new();
+    private readonly Dictionary<uint, bool> _pawnParachute = new();
     private readonly Dictionary<uint, float> _deathTime = new();
     private readonly Dictionary<uint, int> _placement = new();
     private uint? _recorderState;
@@ -118,6 +119,12 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
 
     public override bool ReceiveProperties(FBitArchive archive, NetFieldExportGroup group, uint channelIndex, out INetFieldExportGroup? exportGroup, bool enablePropertyChecksum = true, bool netDeltaUpdate = false)
     {
+        if (!netDeltaUpdate && group.PathName.EndsWith("FortPoiManager", StringComparison.Ordinal))
+        {
+            exportGroup = null!;
+            return ReadPoiManager(archive, group, enablePropertyChecksum);
+        }
+
         if (!netDeltaUpdate && ContainerClasses.IsContainerGroup(group.PathName))
         {
             exportGroup = null!;
@@ -125,6 +132,48 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
         }
 
         return base.ReceiveProperties(archive, group, channelIndex, out exportGroup, enablePropertyChecksum, netDeltaUpdate);
+    }
+
+    /// <summary>Map grid bounds (A–J × 1–10 on the in-game map). UE5 sends FVector2D as two doubles.</summary>
+    public Dictionary<string, (double X, double Y)> MapGrid { get; } = new();
+
+    private bool ReadPoiManager(FBitArchive archive, NetFieldExportGroup group, bool enablePropertyChecksum)
+    {
+        if (enablePropertyChecksum)
+        {
+            archive.ReadBit();
+        }
+        while (true)
+        {
+            var handle = archive.ReadIntPacked();
+            if (handle == 0)
+            {
+                return true;
+            }
+            handle--;
+            if (!group.IsValidIndex(handle))
+            {
+                return false;
+            }
+            var export = group.NetFieldExports[handle];
+            var numBits = archive.ReadIntPacked();
+            if (numBits == 0)
+            {
+                continue;
+            }
+            _cmd.FillBitsFrom(archive, (int)numBits);
+            if (export?.Name is { } name && name.StartsWith("WorldGrid", StringComparison.Ordinal))
+            {
+                if (numBits == 128)
+                {
+                    MapGrid[name] = (_cmd.ReadDouble(), _cmd.ReadDouble());
+                }
+                else if (numBits == 64)
+                {
+                    MapGrid[name] = (_cmd.ReadSingle(), _cmd.ReadSingle());
+                }
+            }
+        }
     }
 
     private bool ReadContainer(FBitArchive archive, NetFieldExportGroup group, uint channelIndex, bool enablePropertyChecksum)
@@ -344,9 +393,14 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
                     _pawnToState[pawnId] = st;
                 }
 
-                if (pawn.bIsSkydiving != null || pawn.bIsParachuteOpen != null)
+                // The two flags replicate independently: keep each one's last value.
+                if (pawn.bIsSkydiving is { } sky)
                 {
-                    _pawnInAir[pawnId] = pawn.bIsSkydiving == true || pawn.bIsParachuteOpen == true;
+                    _pawnSkydiving[pawnId] = sky;
+                }
+                if (pawn.bIsParachuteOpen is { } chute)
+                {
+                    _pawnParachute[pawnId] = chute;
                 }
 
                 if (pawn.ReplicatedMovement is { } mv && mv.Location is not null)
@@ -356,7 +410,7 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
                         list = new List<PawnSample>();
                         _samples[pawnId] = list;
                     }
-                    var inAir = _pawnInAir.GetValueOrDefault(pawnId);
+                    var inAir = _pawnSkydiving.GetValueOrDefault(pawnId) || _pawnParachute.GetValueOrDefault(pawnId);
                     _lastPawnPos[pawnId] = new PawnSample { PawnId = pawnId, Time = _time, X = mv.Location.X, Y = mv.Location.Y, Z = mv.Location.Z, InAir = inAir };
                     // Throttle to ~4 Hz, but always keep air/ground transitions.
                     if (list.Count == 0 || _time - list[^1].Time >= 0.25f || list[^1].InAir != inAir)

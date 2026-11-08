@@ -66,22 +66,38 @@ public sealed class MatchAnalyzer
         return summary;
     }
 
-    /// <summary>First ground contact after skydiving/gliding (the drop point).</summary>
+    /// <summary>Peak height above the touchdown point that marks a drop from the Battle Bus (≈600 m) rather than a
+    /// jump on the pre-game island (15–35 m), Unreal units.</summary>
+    public const double BusDropMinHeight = 15000;
+
+    /// <summary>
+    /// The drop point: first ground contact after an air phase that started high enough to be the Battle Bus drop.
+    /// Pre-game island jumps (launch pads) are ignored. Falls back to the first ground contact after any air phase,
+    /// then to the first sample.
+    /// </summary>
     public static PawnSample FindLanding(IReadOnlyList<PawnSample> mine)
     {
-        var sawAir = false;
+        PawnSample? anyLanding = null;
+        double peak = double.MinValue;
+        var inAir = false;
         foreach (var s in mine)
         {
             if (s.InAir)
             {
-                sawAir = true;
+                peak = inAir ? Math.Max(peak, s.Z) : s.Z;
+                inAir = true;
+                continue;
             }
-            else if (sawAir)
+            if (inAir)
             {
-                return s;
+                anyLanding ??= s;
+                if (peak - s.Z >= BusDropMinHeight)
+                {
+                    return s;
+                }
             }
+            inAir = false;
         }
-        // Never saw the glide (e.g. joined late): use the first sample.
-        return mine[0];
+        return anyLanding ?? mine[0];
     }
 }

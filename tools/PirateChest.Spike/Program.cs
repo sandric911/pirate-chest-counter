@@ -55,6 +55,7 @@ Parallel.ForEach(files, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(
         r.Classes = reader.Diagnostics.Classes;
         r.Warnings = reader.Diagnostics.Warnings;
         r.Paths = reader.Diagnostics.Paths.ToList();
+        r.Grid = string.Join("; ", reader.MapGrid.Select(kv => $"{kv.Key}=({kv.Value.X:F0},{kv.Value.Y:F0})"));
         r.Placement = $"teamstats={replay.TeamStats?.Position}/{replay.TeamStats?.TotalPlayers} final={trace.Meta.OwnerPlacement}";
         r.EventCounts = trace.ContainerEvents
             .GroupBy(e => $"{e.ClassName}|{e.Kind}{(e.CloseReason is { } cr ? ":" + cr : "")}")
@@ -69,7 +70,7 @@ Parallel.ForEach(files, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(
     r.Seconds = sw.Elapsed.TotalSeconds;
     results.Add(r);
     var n = Interlocked.Increment(ref done);
-    Console.WriteLine($"[{n}/{files.Length}] {r.File} ok={r.Ok} {r.Seconds:F1}s {r.Playlist} {r.Placement} {r.Error}");
+    Console.WriteLine($"[{n}/{files.Length}] {r.File} ok={r.Ok} {r.Seconds:F1}s {r.Playlist} {r.Placement} {r.Grid} {r.Error}");
 });
 
 var all = results.OrderBy(r => r.File).ToList();
@@ -120,5 +121,6 @@ class SpikeResult
     public List<string>? Warnings { get; set; }
     public List<string>? Paths { get; set; }
     public string? Placement { get; set; }
+    public string? Grid { get; set; }
     public Dictionary<string, int>? EventCounts { get; set; }
 }

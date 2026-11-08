@@ -93,7 +93,7 @@ public static class Doctor
             if (File.Exists(AppPaths.DbPath))
             {
                 var db = new Database(AppPaths.DbPath);
-                var matches = db.Matches();
+                var matches = db.Matches().Where(m => !Stats.IsHidden(m)).ToList();
                 var counted = matches.Where(m => m.Status == "counted").ToList();
                 var errors = db.Files("error").Count;
                 Ok("База", $"{AppPaths.DbPath}: матчей засчитано {counted.Count}, пропущено {matches.Count - counted.Count}, «Мои» = {counted.Sum(m => m.Mine)}");

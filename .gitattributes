@@ -1,0 +1,7 @@
+*.ps1 text eol=crlf
+*.cs text
+*.md text
+*.json.gz binary
+*.png binary
+*.ico binary
+*.woff2 binary
