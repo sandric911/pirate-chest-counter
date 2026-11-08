@@ -89,11 +89,11 @@ public sealed class WebServer : IAsyncDisposable
         var stats = new Stats(s.Db);
 
         app.MapGet("/api/ping", () => Results.Json(new { app = AppInfo.Name, version = AppInfo.VersionText, pid = Environment.ProcessId }));
-        app.MapGet("/api/summary", () => Results.Json(stats.Summary(s.Processor.Status)));
+        app.MapGet("/api/summary", () => Results.Json(stats.Summary(s.Processor.Status, s.Fortnite.Running)));
         app.MapGet("/api/matches", () => Results.Json(stats.MatchList()));
         app.MapGet("/api/daily", () => Results.Json(stats.Daily()));
         app.MapGet("/api/efficiency", () => Results.Json(stats.Efficiency()));
-        app.MapGet("/api/map/points", (string? match) => Results.Json(stats.MapPoints(string.IsNullOrEmpty(match) ? null : match)));
+        app.MapGet("/api/map/chests", (string? match) => Results.Json(stats.MapChests(string.IsNullOrEmpty(match) ? null : match, s.Atlas)));
         app.MapGet("/api/map/calibration", () => Results.Text(s.Db.Get("map_calibration") ?? DefaultCalibration(), "application/json"));
         app.MapGet("/api/status", () => Results.Json(StatusInfo(s, stats)));
         app.MapPost("/api/recount", () =>
@@ -182,6 +182,7 @@ public sealed class WebServer : IAsyncDisposable
             ".js" => "text/javascript; charset=utf-8",
             ".css" => "text/css; charset=utf-8",
             ".png" => "image/png",
+            ".webp" => "image/webp",
             ".svg" => "image/svg+xml",
             ".ico" => "image/x-icon",
             ".json" => "application/json",

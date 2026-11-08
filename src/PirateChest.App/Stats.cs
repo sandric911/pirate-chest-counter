@@ -16,7 +16,8 @@ public sealed class Poi
 /// <summary>Aggregations for the web UI. Everything is computed from the database on request.</summary>
 public sealed class Stats
 {
-    public static readonly TimeSpan SessionGap = TimeSpan.FromMinutes(45);
+    /// <summary>A break between matches longer than this ends the gaming session.</summary>
+    public static readonly TimeSpan SessionGap = TimeSpan.FromMinutes(60);
     private readonly Database _db;
 
     public Stats(Database db) => _db = db;
@@ -34,7 +35,7 @@ public sealed class Stats
     /// <summary>Matches whose mode could not be determined (30-second leftovers etc.) are not shown anywhere.</summary>
     public static bool IsHidden(MatchRow m) => m.Status == "skipped" && string.IsNullOrEmpty(m.Playlist);
 
-    public object Summary(ProcessorStatus ps)
+    public object Summary(ProcessorStatus ps, bool fortniteRunning)
     {
         var matches = _db.Matches().Where(m => !IsHidden(m)).ToList();
         var counted = matches.Where(m => m.Status == "counted").ToList();
@@ -46,7 +47,9 @@ public sealed class Stats
 
         var today = DateTime.Now.Date;
         var todayIds = counted.Where(m => Local(m.StartedUtc).Date == today).Select(m => m.ReplayId).ToHashSet();
-        var sessionIds = CurrentSession(counted).Select(m => m.ReplayId).ToHashSet();
+        var now = DateTime.UtcNow;
+        var session = CurrentSession(counted, fortniteRunning ? ps.LiveSinceUtc : null, now);
+        var sessionIds = session.Matches.Select(m => m.ReplayId).ToHashSet();
 
         var types = new[] { nameof(ChestType.Normal), nameof(ChestType.Rare), nameof(ChestType.Sprite) };
         var last = counted.LastOrDefault();
@@ -56,7 +59,18 @@ public sealed class Stats
             mine = mine.Count,
             squad = squad.Count,
             today = new { mine = mine.Count(c => todayIds.Contains(c.ReplayId)), squad = squad.Count(c => todayIds.Contains(c.ReplayId)), matches = todayIds.Count },
-            session = new { mine = mine.Count(c => sessionIds.Contains(c.ReplayId)), squad = squad.Count(c => sessionIds.Contains(c.ReplayId)), matches = sessionIds.Count },
+            session = new
+            {
+                active = session.StartedUtc != null,
+                startedUtc = session.StartedUtc,
+                lastEndUtc = session.LastEndUtc,
+                playing = session.Playing,
+                gapMin = (int)SessionGap.TotalMinutes,
+                serverNowUtc = now,
+                mine = mine.Count(c => sessionIds.Contains(c.ReplayId)),
+                squad = squad.Count(c => sessionIds.Contains(c.ReplayId)),
+                matches = sessionIds.Count,
+            },
             byType = types.Select(t => new
             {
                 type = t,
@@ -82,31 +96,42 @@ public sealed class Stats
         };
     }
 
-    /// <summary>Matches of the current gaming session: consecutive matches with gaps under 45 min, ending recently.</summary>
-    public static List<MatchRow> CurrentSession(List<MatchRow> counted)
+    public sealed record SessionInfo(List<MatchRow> Matches, DateTime? StartedUtc, DateTime? LastEndUtc, bool Playing);
+
+    /// <summary>
+    /// The current gaming session: consecutive matches with breaks of at most <see cref="SessionGap"/>.
+    /// It goes on while the break since the last match is within the gap; a match being recorded right now
+    /// (<paramref name="recordingSinceUtc"/>) ends the break, or starts a new session if the old one is over.
+    /// </summary>
+    public static SessionInfo CurrentSession(List<MatchRow> counted, DateTime? recordingSinceUtc, DateTime nowUtc)
     {
-        var result = new List<MatchRow>();
-        if (counted.Count == 0)
-        {
-            return result;
-        }
+        static DateTime End(MatchRow m) => m.StartedUtc.AddSeconds(m.LengthSec);
         var ordered = counted.OrderBy(m => m.StartedUtc).ToList();
-        var lastEnd = ordered[^1].StartedUtc.AddSeconds(ordered[^1].LengthSec);
-        if (DateTime.UtcNow - lastEnd > SessionGap)
+        var chain = new List<MatchRow>();
+        if (ordered.Count > 0 && (recordingSinceUtc ?? nowUtc) - End(ordered[^1]) <= SessionGap)
         {
-            return result; // no session in progress
-        }
-        result.Add(ordered[^1]);
-        for (var i = ordered.Count - 2; i >= 0; i--)
-        {
-            var end = ordered[i].StartedUtc.AddSeconds(ordered[i].LengthSec);
-            if (ordered[i + 1].StartedUtc - end > SessionGap)
+            chain.Add(ordered[^1]);
+            for (var i = ordered.Count - 2; i >= 0; i--)
             {
-                break;
+                if (ordered[i + 1].StartedUtc - End(ordered[i]) > SessionGap)
+                {
+                    break;
+                }
+                chain.Add(ordered[i]);
             }
-            result.Add(ordered[i]);
+            chain.Reverse();
         }
-        return result;
+        var playing = recordingSinceUtc != null;
+        if (chain.Count == 0 && !playing)
+        {
+            return new SessionInfo(chain, null, null, false);
+        }
+        var started = chain.Count > 0 ? chain[0].StartedUtc : recordingSinceUtc!.Value;
+        if (recordingSinceUtc is { } r && r < started)
+        {
+            started = r;
+        }
+        return new SessionInfo(chain, started, chain.Count > 0 ? End(chain[^1]) : null, playing);
     }
 
     public object MatchList()
@@ -241,7 +266,6 @@ public sealed class Stats
                 startedUtc = m.StartedUtc,
                 mode = MatchFilter.ModeLabel(m.Playlist),
                 mine = m.Mine,
-                beforeDeath = m.MineBeforeDeath,
                 minutes = Math.Round(minutes, 1),
                 cpm = minutes > 0.5 ? Math.Round(m.Mine / minutes, 2) : (double?)null,
                 landingX = m.LandingX,
@@ -261,7 +285,6 @@ public sealed class Stats
             isPoi = g.First().isPoi,
             matches = g.Count(),
             avgMine = Math.Round(g.Average(r => r.mine), 1),
-            avgBeforeDeath = Math.Round(g.Average(r => r.beforeDeath), 1),
             cpm = g.Sum(r => r.minutes) > 0 ? Math.Round(g.Sum(r => r.mine) / g.Sum(r => r.minutes), 2) : 0,
             best = g.Max(r => r.mine),
             x = g.Average(r => r.landingX ?? 0),
@@ -275,7 +298,6 @@ public sealed class Stats
                 matches = rows.Count,
                 cpm = totalMinutes > 0 ? Math.Round(withTime.Sum(r => r.mine) / totalMinutes, 2) : 0,
                 perMatch = rows.Count > 0 ? Math.Round(rows.Average(r => r.mine), 1) : 0,
-                beforeDeath = rows.Count > 0 ? Math.Round(rows.Average(r => r.beforeDeath), 1) : 0,
                 best = rows.Count > 0 ? rows.Max(r => r.mine) : 0,
             },
             matches = rows.OrderByDescending(r => r.startedUtc),
@@ -283,26 +305,115 @@ public sealed class Stats
         };
     }
 
-    public object MapPoints(string? matchId)
+    private sealed class ChestSpot
     {
-        var countedIds = _db.Matches().Where(m => m.Status == "counted").Select(m => m.ReplayId).ToHashSet();
-        var credits = _db.Credits(matchId).Where(c => countedIds.Contains(c.ReplayId) && c.X != null && c.Y != null);
-        return credits.Select(c => new
-        {
-            m = c.ReplayId,
-            x = Math.Round(c.X!.Value),
-            y = Math.Round(c.Y!.Value),
-            by = c.By == nameof(Who.Me) ? "me" : "squad",
-            heur = c.Method == nameof(Attribution.Heuristic),
-            type = c.Type,
-        });
+        public double SumX, SumY;
+        public int N;
+        public bool Fixed;
+        public bool Dynamic;
+        public string Type = "";
+        public int Me, Squad;
+        public readonly Dictionary<string, int> Types = new();
+        public readonly HashSet<string> MeMatches = new();
+        public double X => SumX / Math.Max(1, N);
+        public double Y => SumY / Math.Max(1, N);
     }
 
-    public object AtlasPoints(ChestAtlas atlas)
+    /// <summary>
+    /// One marker per chest with how many times I and my teammates searched it. Level-placed chests are matched
+    /// across matches by their actor name (stable on this map) and placed by the atlas; spawned chests (relic,
+    /// buried, booty) by type and position within 3 m. <c>others</c>: chests the atlas knows that none of these
+    /// searches touched.
+    /// </summary>
+    public object MapChests(string? matchId, ChestAtlas atlas)
     {
+        const double same = 300; // 3 m
+        var countedIds = _db.Matches().Where(m => m.Status == "counted").Select(m => m.ReplayId).ToHashSet();
+        var credits = _db.Credits(matchId)
+            .Where(c => countedIds.Contains(c.ReplayId) && c.By is nameof(Who.Me) or nameof(Who.Teammate))
+            .OrderBy(c => c.ReplayId).ThenBy(c => c.Time).ToList();
+        var spots = new List<ChestSpot>();
+        var byKey = new Dictionary<string, ChestSpot>();
+        var classifier = ChestClassifier.Default;
         lock (atlas)
         {
-            return atlas.Entries.Where(e => e.Value.N >= 1).Select(e => new { x = Math.Round(e.Value.X), y = Math.Round(e.Value.Y) }).ToList();
+            foreach (var c in credits)
+            {
+                ChestSpot? spot;
+                var dynamic = c.ChestKey.StartsWith("dyn:", StringComparison.Ordinal);
+                if (!dynamic)
+                {
+                    if (!byKey.TryGetValue(c.ChestKey, out spot))
+                    {
+                        spot = new ChestSpot();
+                        if (atlas.Locate(c.ChestKey) is { } at)
+                        {
+                            (spot.SumX, spot.SumY, spot.N, spot.Fixed) = (at.X, at.Y, 1, true);
+                        }
+                        byKey[c.ChestKey] = spot;
+                        spots.Add(spot);
+                    }
+                }
+                else
+                {
+                    if (c.X is not { } dx || c.Y is not { } dy)
+                    {
+                        continue;
+                    }
+                    spot = spots.FirstOrDefault(s => s.Dynamic && s.Types.ContainsKey(c.Type)
+                        && (s.X - dx) * (s.X - dx) + (s.Y - dy) * (s.Y - dy) <= same * same);
+                    if (spot == null)
+                    {
+                        spot = new ChestSpot { Dynamic = true };
+                        spots.Add(spot);
+                    }
+                }
+                if (!spot.Fixed && c.X is { } x && c.Y is { } y)
+                {
+                    spot.SumX += x;
+                    spot.SumY += y;
+                    spot.N++;
+                }
+                spot.Types[c.Type] = spot.Types.GetValueOrDefault(c.Type) + 1;
+                if (c.By == nameof(Who.Me))
+                {
+                    spot.Me++;
+                    spot.MeMatches.Add(c.ReplayId);
+                }
+                else
+                {
+                    spot.Squad++;
+                }
+            }
+
+            var others = atlas.Entries
+                .Where(e => !byKey.ContainsKey(e.Key) && e.Value.N >= atlas.MinSamples && IsChestKey(e.Key, classifier))
+                .Select(e => new { x = Math.Round(e.Value.X), y = Math.Round(e.Value.Y) })
+                .ToList();
+
+            return new
+            {
+                chests = spots.Where(s => s.N > 0).Select(s => new
+                {
+                    x = Math.Round(s.X),
+                    y = Math.Round(s.Y),
+                    type = s.Types.OrderByDescending(t => t.Value).ThenByDescending(t => Rarity(t.Key)).First().Key,
+                    me = s.Me,
+                    squad = s.Squad,
+                    matches = s.MeMatches.Count,
+                }).ToList(),
+                others,
+            };
         }
+    }
+
+    private static int Rarity(string type) => type switch { nameof(ChestType.Sprite) => 2, nameof(ChestType.Rare) => 1, _ => 0 };
+
+    /// <summary>Atlas keys are actor names such as <c>Tiered_Chest_Athena_C_UAID_…</c>; ammo boxes and the like are skipped.</summary>
+    private static bool IsChestKey(string key, ChestClassifier classifier)
+    {
+        var end = key.IndexOf("_C_", StringComparison.Ordinal);
+        var cls = end > 0 ? key[..(end + 2)] : key;
+        return classifier.RoleOf(cls, out _) == ContainerRole.Chest;
     }
 }

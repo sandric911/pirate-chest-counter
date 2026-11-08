@@ -10,6 +10,8 @@ public sealed class ProcessorStatus
     public int ReplayFiles { get; set; }
     public int Pending { get; set; }
     public int Live { get; set; }
+    /// <summary>Start of the replay being recorded right now (oldest live file of the last 45 min), if any.</summary>
+    public DateTime? LiveSinceUtc { get; set; }
     public int Errors { get; set; }
     public string? Current { get; set; }
     public int BatchTotal { get; set; }
@@ -143,7 +145,16 @@ public sealed class ReplayProcessor : IDisposable
         _db.ForgetMissingFiles(files.ToHashSet(StringComparer.OrdinalIgnoreCase));
         _backupTodo.Clear();
         int live = 0, errors = 0;
-        DateTime? newest = null;
+        DateTime? newest = null, liveSince = null;
+        void NoteLive(FileInfo f)
+        {
+            live++;
+            var created = f.CreationTimeUtc;
+            if (DateTime.UtcNow - created < TimeSpan.FromMinutes(45) && (liveSince == null || created < liveSince))
+            {
+                liveSince = created;
+            }
+        }
 
         foreach (var path in files.OrderBy(f => f))
         {
@@ -198,7 +209,7 @@ public sealed class ReplayProcessor : IDisposable
             // New or changed file: only touch it once it has settled.
             if (DateTime.UtcNow - mtime < Settle)
             {
-                live++;
+                NoteLive(fi);
                 continue;
             }
 
@@ -207,7 +218,7 @@ public sealed class ReplayProcessor : IDisposable
             {
                 if (DateTime.UtcNow - mtime < TimeSpan.FromMinutes(30))
                 {
-                    live++; // probably still being created
+                    NoteLive(fi); // probably still being created
                     continue;
                 }
                 _db.UpsertFile(path, fi.Length, mtime.Ticks, null, "error", "Не удалось прочитать заголовок: " + peek.Error, null, true);
@@ -220,7 +231,7 @@ public sealed class ReplayProcessor : IDisposable
                 if (DateTime.UtcNow - mtime < TimeSpan.FromHours(3))
                 {
                     _db.UpsertFile(path, fi.Length, mtime.Ticks, peek.ReplayId, "live");
-                    live++;
+                    NoteLive(fi);
                     continue;
                 }
             }
@@ -236,6 +247,7 @@ public sealed class ReplayProcessor : IDisposable
         }
 
         Status.Live = live;
+        Status.LiveSinceUtc = liveSince;
         Status.Errors = errors;
         Status.Pending = queue.Count;
         Status.NewestReplayUtc = newest;
