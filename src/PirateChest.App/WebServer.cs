@@ -94,44 +94,11 @@ public sealed class WebServer : IAsyncDisposable
         app.MapGet("/api/daily", () => Results.Json(stats.Daily()));
         app.MapGet("/api/efficiency", () => Results.Json(stats.Efficiency()));
         app.MapGet("/api/map/points", (string? match) => Results.Json(stats.MapPoints(string.IsNullOrEmpty(match) ? null : match)));
-        app.MapGet("/api/map/atlas", () => Results.Json(stats.AtlasPoints(s.Atlas)));
         app.MapGet("/api/map/calibration", () => Results.Text(s.Db.Get("map_calibration") ?? DefaultCalibration(), "application/json"));
-        app.MapPost("/api/map/calibration", async (HttpRequest req) =>
-        {
-            using var doc = await JsonDocument.ParseAsync(req.Body);
-            var root = doc.RootElement;
-            foreach (var k in new[] { "w1", "p1", "w2", "p2" })
-            {
-                if (!root.TryGetProperty(k, out var v) || !v.TryGetProperty("x", out _) || !v.TryGetProperty("y", out _))
-                {
-                    return Results.BadRequest(new { error = "нужны точки w1, p1, w2, p2" });
-                }
-            }
-            s.Db.Set("map_calibration", root.GetRawText());
-            return Results.Ok();
-        });
-        app.MapGet("/api/pois", () => Results.Json(stats.Pois()));
-        app.MapPost("/api/pois/rename", (PoiRename r) =>
-        {
-            if (string.IsNullOrWhiteSpace(r.Id) || string.IsNullOrWhiteSpace(r.Name) || r.Name.Length > 60)
-            {
-                return Results.BadRequest();
-            }
-            stats.RenamePoi(r.Id, r.Name);
-            return Results.Ok();
-        });
         app.MapGet("/api/status", () => Results.Json(StatusInfo(s, stats)));
         app.MapPost("/api/recount", () =>
         {
             s.Processor.RecountAll();
-            return Results.Ok();
-        });
-        app.MapPost("/api/settings", (SettingsDto d) =>
-        {
-            if (d.HeuristicRadiusM is { } r and >= 1 and <= 100)
-            {
-                s.Db.Set("heuristic_radius_m", r.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            }
             return Results.Ok();
         });
         app.MapPost("/api/update/check", async () =>
@@ -167,14 +134,14 @@ public sealed class WebServer : IAsyncDisposable
             newestReplayUtc = ps.NewestReplayUtc,
             lastScanUtc = ps.LastScanUtc,
             progress = new { busy = ps.Current != null || ps.Pending > 0, current = ps.Current, done = ps.BatchDone, total = ps.BatchTotal, pending = ps.Pending, live = ps.Live },
-            queue = stats.Errors(),
+            errors = ps.Errors,
+            backups = ps.Backups,
+            backupBytes = ps.BackupBytes,
             recordingWarning = s.Fortnite.RecordingWarning(ps),
             fortniteRunning = s.Fortnite.Running,
             autostart = Autostart.IsEnabled(),
             installed = AppPaths.RunningInstalled,
             dataDir = AppPaths.DataDir,
-            atlas = s.Db.AtlasCount(),
-            heuristicRadiusM = s.Db.GetDouble("heuristic_radius_m", 15),
             hasMap = typeof(WebServer).Assembly.GetManifestResourceInfo("wwwroot/map.png") != null || File.Exists(Path.Combine(AppPaths.DataDir, "map.png")),
         };
     }
@@ -228,6 +195,4 @@ public sealed class WebServer : IAsyncDisposable
         }
     }
 
-    public sealed record PoiRename(string Id, string Name);
-    public sealed record SettingsDto(double? HeuristicRadiusM);
 }

@@ -34,6 +34,8 @@ public static class AppPaths
     public static string InstanceFile => Path.Combine(DataDir, "instance.json");
     public static string DoctorReport => Path.Combine(DataDir, "doctor.txt");
     public static string UpdateDir => Path.Combine(DataDir, "update");
+    /// <summary>Copies of counted replays, so Fortnite's auto-cleanup never loses a match.</summary>
+    public static string BackupDir => Path.Combine(DataDir, "replays");
     public static string DemosDir => Environment.GetEnvironmentVariable("PCC_DEMOS_DIR") ?? Path.Combine(LocalAppData, "FortniteGame", "Saved", "Demos");
 
     public static string CurrentExe => Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, AppInfo.ExeName);

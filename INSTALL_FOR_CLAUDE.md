@@ -100,7 +100,7 @@ $installed = Join-Path $env:LOCALAPPDATA 'Programs\PirateChestCounter\PirateChes
 ```
 
 Это выключает автозапуск, убирает ярлык и запись в «Установленных приложениях» и удаляет папку программы.
-Статистика остаётся в `%LOCALAPPDATA%\PirateChestCounter`. Удалить вместе со статистикой:
+Статистика и сохранённые копии реплеев остаются в `%LOCALAPPDATA%\PirateChestCounter`. Удалить вместе с ними:
 `--uninstall --purge`. Реплеи Fortnite программа никогда не меняет и не удаляет.
 
 ## Что сказать человеку в конце

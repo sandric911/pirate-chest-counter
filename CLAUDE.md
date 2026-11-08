@@ -21,7 +21,8 @@
 | `docs/SPIKE_REPORT.md` | что показал разбор реальных реплеев v43 |
 | `docs/MAINTENANCE.md` | что может сломаться после обновления Fortnite и как чинить |
 
-Запреты: не читать память игры, не трогать файлы Fortnite (реплеи — только чтение с `FileShare.ReadWrite`),
+Запреты: не читать память игры, не менять и не удалять файлы Fortnite (реплеи открываются только на чтение с
+`FileShare.ReadWrite|Delete`; копии засчитанных матчей — в `%LOCALAPPDATA%\PirateChestCounter\replays`),
 сеть — только GitHub. Не коммитить реплеи, базу, ники и ID аккаунтов.
 
 Переменные окружения для отладки: `PCC_DATA_DIR`, `PCC_DEMOS_DIR`, `PCC_INSTALL_DIR`, `PCC_NO_AUTOINSTALL=1`, `PCC_NO_BROWSER=1`.

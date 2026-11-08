@@ -15,6 +15,8 @@ public sealed class ProcessorStatus
     public int BatchTotal { get; set; }
     public int BatchDone { get; set; }
     public DateTime? NewestReplayUtc { get; set; }
+    public int Backups { get; set; }
+    public long BackupBytes { get; set; }
     public DateTime? LastScanUtc { get; set; }
 }
 
@@ -33,6 +35,7 @@ public sealed class ReplayProcessor : IDisposable
     private readonly CancellationTokenSource _cts = new();
     private FileSystemWatcher? _watcher;
     private Thread? _thread;
+    private readonly List<(string Path, string ReplayId)> _backupTodo = new();
 
     public ProcessorStatus Status { get; } = new() { DemosDir = AppPaths.DemosDir };
 
@@ -100,6 +103,7 @@ public sealed class ReplayProcessor : IDisposable
                     ProcessBatch(queue);
                     continue; // rescan right away: more files may have settled meanwhile
                 }
+                MakeBackups();
             }
             catch (Exception ex)
             {
@@ -114,21 +118,30 @@ public sealed class ReplayProcessor : IDisposable
         }
     }
 
-    /// <summary>Finds finished replays that still need counting.</summary>
+    /// <summary>
+    /// Finds finished replays that still need counting. Already counted replays are recognised from the database
+    /// (path + size + time) and never read again, unless the counting rules changed in an update.
+    /// Backups stand in for replays Fortnite has already deleted.
+    /// </summary>
     private List<string> Scan()
     {
         var queue = new List<string>();
         Status.LastScanUtc = DateTime.UtcNow;
         Status.DemosFound = Directory.Exists(AppPaths.DemosDir);
-        if (!Status.DemosFound)
-        {
-            Status.ReplayFiles = 0;
-            return queue;
-        }
+        var demos = Status.DemosFound ? Directory.GetFiles(AppPaths.DemosDir, "*.replay") : Array.Empty<string>();
+        Status.ReplayFiles = demos.Length;
 
-        var files = Directory.GetFiles(AppPaths.DemosDir, "*.replay");
-        Status.ReplayFiles = files.Length;
+        var rows = _db.Files().ToDictionary(r => r.Path, StringComparer.OrdinalIgnoreCase);
+        var states = _db.MatchStates();
+        var liveIds = demos.Select(p => rows.TryGetValue(p, out var r) ? r.ReplayId : null)
+            .OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var backups = Directory.Exists(AppPaths.BackupDir) ? Directory.GetFiles(AppPaths.BackupDir, "*.replay") : Array.Empty<string>();
+        Status.Backups = backups.Length;
+        Status.BackupBytes = backups.Sum(b => new FileInfo(b).Length);
+        var files = demos.Concat(backups.Where(b => !liveIds.Contains(Path.GetFileNameWithoutExtension(b)))).ToArray();
+
         _db.ForgetMissingFiles(files.ToHashSet(StringComparer.OrdinalIgnoreCase));
+        _backupTodo.Clear();
         int live = 0, errors = 0;
         DateTime? newest = null;
 
@@ -145,15 +158,21 @@ public sealed class ReplayProcessor : IDisposable
                 newest = mtime;
             }
 
-            var row = _db.GetFile(path);
+            rows.TryGetValue(path, out var row);
             var unchanged = row != null && row.Size == fi.Length && row.MtimeTicks == mtime.Ticks;
 
             if (unchanged && row!.Status is "done" or "skipped")
             {
-                // Recount when the counting rules changed since this replay was counted.
-                if (row.ReplayId != null && _db.MatchState(row.ReplayId) is { } st && st.ParserVersion != AppInfo.ParserVersion)
+                if (row.ReplayId != null && states.TryGetValue(row.ReplayId, out var st))
                 {
-                    queue.Add(path);
+                    if (st.ParserVersion != AppInfo.ParserVersion)
+                    {
+                        queue.Add(path); // the counting rules changed in an update
+                    }
+                    else if (st.Status == "counted" && !IsBackup(path) && !File.Exists(BackupPathOf(row.ReplayId)))
+                    {
+                        _backupTodo.Add((path, row.ReplayId));
+                    }
                 }
                 continue;
             }
@@ -205,7 +224,7 @@ public sealed class ReplayProcessor : IDisposable
                     continue;
                 }
             }
-            if (peek.ReplayId != null && _db.MatchState(peek.ReplayId) is { } known && known.ParserVersion == AppInfo.ParserVersion)
+            if (peek.ReplayId != null && states.TryGetValue(peek.ReplayId, out var known) && known.ParserVersion == AppInfo.ParserVersion)
             {
                 // Same replay id already counted (copied/renamed file): never count twice.
                 _db.UpsertFile(path, fi.Length, mtime.Ticks, peek.ReplayId, known.Status == "counted" ? "done" : "skipped");
@@ -303,7 +322,11 @@ public sealed class ReplayProcessor : IDisposable
             {
                 summary = new MatchAnalyzer(options: options, locator: _atlas).Analyze(trace);
             }
-            _db.SaveMatch(fi.Name, summary);
+            _db.SaveMatch(IsBackup(path) ? FileNameOf(trace.Meta) : fi.Name, summary);
+            if (summary.Counted && !IsBackup(path))
+            {
+                EnsureBackup(path, trace.Meta.ReplayId);
+            }
             _db.UpsertFile(path, fi.Length, fi.LastWriteTimeUtc.Ticks, trace.Meta.ReplayId, summary.Counted ? "done" : "skipped", null, build);
             Log.Info($"{fi.Name}: {(summary.Counted ? $"mine={summary.Count.Mine} squad={summary.Count.MineAndSquad}" : "skipped: " + summary.SkipReason)}");
             return summary;
@@ -313,6 +336,63 @@ public sealed class ReplayProcessor : IDisposable
             Log.Error($"parse {fi.Name}", ex);
             _db.UpsertFile(path, fi.Length, fi.LastWriteTimeUtc.Ticks, null, "error", $"{ex.GetType().Name}: {ex.Message}", build, true);
             return null;
+        }
+    }
+
+    private static string FileNameOf(PirateChest.Core.Trace.ReplayMeta meta) =>
+        $"UnsavedReplay-{meta.TimestampUtc.ToLocalTime():yyyy.MM.dd-HH.mm.ss}.replay";
+
+    private static bool IsBackup(string path) =>
+        path.StartsWith(AppPaths.BackupDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+
+    private static string BackupPathOf(string replayId)
+    {
+        var safe = new string(replayId.Where(ch => char.IsAsciiLetterOrDigit(ch) || ch == '-').ToArray());
+        return Path.Combine(AppPaths.BackupDir, safe + ".replay");
+    }
+
+    /// <summary>Copies finished, counted replays that have no backup yet (first run / after an update).</summary>
+    private void MakeBackups()
+    {
+        foreach (var (path, id) in _backupTodo)
+        {
+            if (_cts.IsCancellationRequested)
+            {
+                return;
+            }
+            EnsureBackup(path, id);
+        }
+        _backupTodo.Clear();
+    }
+
+    /// <summary>
+    /// Copies a finished replay into the program's folder. The original is opened read-only with
+    /// FileShare.ReadWrite|Delete, so Fortnite can still delete or rotate it; the copy is written under a temp
+    /// name and renamed, so a half-copied file is never mistaken for a backup.
+    /// </summary>
+    private static void EnsureBackup(string src, string replayId)
+    {
+        try
+        {
+            var dest = BackupPathOf(replayId);
+            var length = new FileInfo(src).Length;
+            if (File.Exists(dest) && new FileInfo(dest).Length == length)
+            {
+                return;
+            }
+            Directory.CreateDirectory(AppPaths.BackupDir);
+            var tmp = dest + ".tmp";
+            using (var input = new FileStream(src, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 20, FileOptions.SequentialScan))
+            using (var output = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20))
+            {
+                input.CopyTo(output);
+            }
+            File.Move(tmp, dest, true);
+            File.SetLastWriteTimeUtc(dest, File.GetLastWriteTimeUtc(src));
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"backup {Path.GetFileName(src)}", ex);
         }
     }
 

@@ -141,7 +141,7 @@ function warnBanner(text) {
 function progressBanner(p) {
   if (!p.busy) return '';
   const pct = p.total ? Math.round((100 * p.done) / p.total) : 5;
-  return `<div class="banner info">${icon('refresh')}<div style="flex:1"><b>Считаю реплеи: ${n(p.done)} из ${n(p.total || p.pending)}</b>${p.current ? ` · ${esc(p.current)}` : ''}
+  return `<div class="banner info">${icon('refresh')}<div style="flex:1"><b>Считаю матчи: ${n(p.done)} из ${n(p.total || p.pending)}</b>
     <div class="progress"><div style="width:${pct}%"></div></div></div></div>`;
 }
 
@@ -165,13 +165,12 @@ async function renderHome() {
           <svg class="ico watermark"><use href="#i-chest"/></svg>
           <div class="label">${icon('chest')} Мои сундуки</div>
           <div class="big">${n(s.mine)}</div>
-          <div class="sub">открыто мной за ${n(s.matches)} ${matchesW(s.matches)} мини-сезона</div>
+          <div class="sub">за ${n(s.matches)} ${matchesW(s.matches)}</div>
         </div>
         <div class="tile t-rare">
           <svg class="ico watermark"><use href="#i-squad"/></svg>
           <div class="label">${icon('squad')} Мои + отряд <span class="tag">не меньше</span></div>
           <div class="big">${n(s.squad)}</div>
-          <div class="sub">далёких тиммейтов реплей может не видеть, поэтому на деле может быть больше</div>
         </div>
       </div>
       <div class="grid g3" style="margin-top:18px">
@@ -183,7 +182,7 @@ async function renderHome() {
           <div class="stat"><div class="v">${n(s.session.mine)}</div><div class="k">мои</div></div>
           <div class="stat"><div class="v">${n(s.session.squad)}</div><div class="k">с отрядом</div></div>
           <div class="stat"><div class="v">${n(s.session.matches)}</div><div class="k">${matchesW(s.session.matches)}</div></div></div>`
-          : '<div class="stat"><div class="k" style="font-size:15px">Сессия не идёт: последний матч был больше 45 минут назад.</div></div>'}</div>
+          : '<div class="stat"><div class="k" style="font-size:15px">Сессия не идёт</div></div>'}</div>
         <div class="card"><h3>${icon('clock')} Последний матч</h3>${s.lastMatch ? `
           <div class="stat"><div class="v gold">+${n(s.lastMatch.mine)} <small>мои · +${n(s.lastMatch.squad)} с отрядом</small></div>
           <div class="k muted">${esc(s.lastMatch.mode)} · закончился ${dt(s.lastMatch.endedUtc)} (${ago(s.lastMatch.endedUtc)})</div></div>` : '<div class="muted">Пока нет матчей.</div>'}</div>
@@ -202,7 +201,6 @@ async function renderHome() {
           <div class="stat"><div class="v">${n(s.best)}</div><div class="k">${icon('trophy')} лучший матч</div></div>
           <div class="stat"><div class="v">${n1(s.perMatch)}</div><div class="k">${icon('target')} в среднем за матч</div></div>
         </div>
-        ${s.heuristic.mine || s.heuristic.squad ? `<p class="note">Из них ${n(s.heuristic.mine)} моих и ${n(s.heuristic.squad)} с отрядом засчитаны по эвристике: сундук уничтожен неоткрытым, а кто его сломал, в реплее не записано — засчитан тому, кто стоял ближе 15 м.</p>` : ''}
       </div>`;
   };
   await draw();
@@ -301,15 +299,12 @@ async function renderHistory() {
         { label: 'Место', num: true, value: (m) => (m.placement == null ? null : -m.placement), html: (m) => placeHtml(m.placement) },
         { label: 'Мои', num: true, cls: 'big gold', value: (m) => m.mine, html: (m) => n(m.mine) },
         { label: 'Отряд', num: true, cls: 'big sea', value: (m) => m.squad, html: (m) => n(m.squad) },
-        { label: 'Замечания', value: (m) => m.mineHeuristic + m.squadHeuristic, html: (m) => (m.mineHeuristic || m.squadHeuristic ? `<span class="muted">по эвристике: ${n(m.mineHeuristic)} / ${n(m.squadHeuristic)}</span>` : '') },
       ], counted, { empty: 'Матчей пока нет', sort: { i: 0, dir: 'desc' } })}
-      <p class="note">Нажмите на заголовок столбца, чтобы отсортировать.</p>
     </div>
     ${skipped.length ? `<div class="card" style="margin-top:18px"><h2>${icon('warn')} Пропущено <span class="muted">(${n(skipped.length)})</span></h2>
       ${tableHtml('tSkipped', [
         { label: 'Дата', value: (m) => m.startedUtc, html: (m) => dt(m.startedUtc, true) },
         { label: 'Режим', value: (m) => m.playlist, html: (m) => esc(m.playlist || '—') },
-        { label: 'Билд', value: (m) => m.build, html: (m) => esc(m.build || '') },
         { label: 'Причина', value: (m) => m.skipReason, cls: 'wrap', html: (m) => esc(m.skipReason) },
       ], skipped, { sort: { i: 0, dir: 'desc' } })}</div>` : ''}`;
   bindTables(view);
@@ -329,13 +324,12 @@ async function renderEfficiency() {
   view.innerHTML = `
     <h1>${icon('flame')} Эффективность фарма</h1>
     <div class="grid g4">
-      <div class="tile t-legend stat"><div class="v">${n1(o.cpm)}</div><div class="k">${icon('flame')} сундуков в минуту (от приземления до смерти или конца матча)</div></div>
+      <div class="tile t-legend stat"><div class="v">${n1(o.cpm)}</div><div class="k">${icon('flame')} сундуков в минуту</div></div>
       <div class="tile t-rare stat"><div class="v">${n1(o.perMatch)}</div><div class="k">${icon('target')} сундуков за матч в среднем</div></div>
       <div class="tile t-epic stat"><div class="v">${n1(o.beforeDeath)}</div><div class="k">${icon('skull')} до первой смерти в среднем</div></div>
       <div class="tile t-uncommon stat"><div class="v">${n(o.best)}</div><div class="k">${icon('trophy')} лучший матч</div></div>
     </div>
     <div class="card" style="margin-top:18px"><h2>${icon('glider')} Рейтинг мест высадки</h2>
-      <p class="note" style="margin:-4px 0 10px">Место высадки — первая точка приземления, привязанная к ближайшему месту на карте. Нажмите на заголовок, чтобы отсортировать.</p>
       ${tableHtml('tRank', [
         { label: 'Место', value: (r) => r.name, html: (r) => `<span class="place">${r.isPoi ? icon('pin') : ''}${esc(r.name)}</span>` },
         { label: 'Матчей', num: true, value: (r) => r.matches, html: (r) => n(r.matches) },
@@ -362,9 +356,7 @@ async function renderEfficiency() {
 // ---------------------------------------------------------------- map
 
 async function renderMap() {
-  const [matches, status, atlas, pois, calib] = await Promise.all([
-    api('/api/matches'), api('/api/status'), api('/api/map/atlas'), api('/api/pois'), api('/api/map/calibration'),
-  ]);
+  const [matches, status, calib] = await Promise.all([api('/api/matches'), api('/api/status'), api('/api/map/calibration')]);
   const counted = matches.filter((m) => m.status === 'counted');
   view.innerHTML = `
     <h1>${icon('map')} Карта</h1>
@@ -373,33 +365,11 @@ async function renderMap() {
       <label class="chk"><input type="checkbox" id="lMe" checked><span class="dot" style="background:var(--me)"></span> открыто мной</label>
       <label class="chk"><input type="checkbox" id="lSquad" checked><span class="dot" style="background:var(--squad)"></span> открыто отрядом</label>
       <label class="chk"><input type="checkbox" id="lHeat"> тепловая карта (всё время)</label>
-      <label class="chk"><input type="checkbox" id="lPoi"> подписи мест</label>
-      <div style="flex:1"></div>
-      <button id="calBtn"><span>${icon('target')} Калибровка</span></button>
     </div>
     <div class="mapbox" id="mapbox"><canvas id="mapc" width="1200" height="1200"></canvas>
-      <div class="credit">${status.hasMap ? 'Карта: Fortnite © Epic Games' : 'Карта не добавлена — показаны только точки'}</div>
-      <div class="hint" id="mapHint" style="display:none"></div></div>
-    <div class="card" style="margin-top:18px"><h2>${icon('pin')} Места на карте</h2>
-      <p class="note" style="margin:-4px 0 10px">Используются в рейтинге мест высадки. Название можно поправить.</p>
-      ${tableHtml('tPoi', [
-        { label: 'Название', value: (p) => p.name, html: (p) => `<input type="text" value="${esc(p.name)}" data-id="${esc(p.id)}" style="width:260px">` },
-        { label: 'X, м', num: true, value: (p) => p.x, html: (p) => n(Math.round(p.x / 100)) },
-        { label: 'Y, м', num: true, value: (p) => p.y, html: (p) => n(Math.round(p.y / 100)) },
-        { label: '', sort: false, html: (p) => `<button class="small" data-save="${esc(p.id)}"><span>Сохранить</span></button>` },
-      ], pois, { empty: 'Список мест пуст' })}
-    </div>`;
-  bindTables(view);
-  $('#tPoi').addEventListener('click', async (e) => {
-    const b = e.target.closest('button[data-save]');
-    if (!b) return;
-    const input = view.querySelector(`input[data-id="${CSS.escape(b.dataset.save)}"]`);
-    await post('/api/pois/rename', { id: b.dataset.save, name: input.value });
-    b.querySelector('span').textContent = 'Сохранено';
-    setTimeout(() => { b.querySelector('span').textContent = 'Сохранить'; }, 1500);
-  });
+      ${status.hasMap ? '<div class="credit">Карта: Fortnite © Epic Games</div>' : ''}</div>`;
 
-  const mv = new MapView($('#mapc'), status.hasMap, atlas, pois, calib);
+  const mv = new MapView($('#mapc'), status.hasMap, calib);
   current = mv;
   const reload = async () => {
     const id = $('#mMatch').value;
@@ -408,19 +378,10 @@ async function renderMap() {
     mv.draw();
   };
   const sync = () => {
-    mv.layers = { me: $('#lMe').checked, squad: $('#lSquad').checked, heat: $('#lHeat').checked, poi: $('#lPoi').checked };
+    mv.layers = { me: $('#lMe').checked, squad: $('#lSquad').checked, heat: $('#lHeat').checked };
     reload();
   };
-  ['mMatch', 'lMe', 'lSquad', 'lHeat', 'lPoi'].forEach((id) => $(`#${id}`).addEventListener('change', sync));
-  $('#calBtn').addEventListener('click', () => {
-    if (mv.calibrating) {
-      mv.finishCalibration(true);
-      $('#calBtn').innerHTML = `<span>${icon('target')} Калибровка</span>`;
-    } else {
-      mv.startCalibration($('#mapHint'));
-      $('#calBtn').innerHTML = `<span>${icon('download')} Сохранить калибровку</span>`;
-    }
-  });
+  ['mMatch', 'lMe', 'lSquad', 'lHeat'].forEach((id) => $(`#${id}`).addEventListener('change', sync));
   await mv.ready;
   sync();
 }
@@ -434,16 +395,13 @@ const C = {
 };
 
 class MapView {
-  constructor(canvas, hasMap, atlas, pois, calib) {
+  constructor(canvas, hasMap, calib) {
     this.c = canvas;
     this.ctx = canvas.getContext('2d');
-    this.atlas = atlas;
-    this.pois = pois;
     this.points = [];
     this.heatPoints = [];
-    this.layers = { me: true, squad: true, heat: false, poi: false };
+    this.layers = { me: true, squad: true, heat: false };
     this.img = null;
-    this.calibrating = false;
     this.ready = new Promise((resolve) => {
       if (!hasMap) { resolve(); return; }
       const img = new Image();
@@ -452,27 +410,11 @@ class MapView {
       img.src = '/map.png';
     }).then(() => {
       this.k = this.img ? 2 : 1; // canvas is drawn at 2x the map image for sharp markers
-      this.calib = calib && calib.w1 ? calib : this.autoFit();
-      this.setTransform(this.calib);
+      const k = calib && calib.w1 ? calib : { w1: { x: 0, y: 0 }, p1: { x: 600, y: 600 }, w2: { x: 100000, y: 0 }, p2: { x: 1150, y: 600 } };
+      const w1 = [k.w1.x, k.w1.y], w2 = [k.w2.x, k.w2.y], p1 = [k.p1.x, k.p1.y], p2 = [k.p2.x, k.p2.y];
+      this.a = C.div(C.sub(p2, p1), C.sub(w2, w1));
+      this.b = C.sub(p1, C.mul(this.a, w1));
     });
-  }
-
-  /** Fallback when there is no calibration: Unreal X → right, Y → down (as on the in-game map). */
-  autoFit() {
-    const pts = this.atlas.length ? this.atlas : this.pois;
-    const W = this.c.width / (this.k || 1), H = this.c.height / (this.k || 1);
-    if (!pts.length) return { w1: { x: 0, y: 0 }, p1: { x: W / 2, y: H / 2 }, w2: { x: 100000, y: 0 }, p2: { x: W / 2 + 300, y: H / 2 } };
-    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
-    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-    const s = Math.min(W * 0.84 / Math.max(1, maxX - minX), H * 0.84 / Math.max(1, maxY - minY));
-    const ox = (W - s * (maxX - minX)) / 2, oy = (H - s * (maxY - minY)) / 2;
-    return { w1: { x: minX, y: minY }, p1: { x: ox, y: oy }, w2: { x: maxX, y: minY }, p2: { x: ox + s * (maxX - minX), y: oy } };
-  }
-
-  setTransform(k) {
-    const w1 = [k.w1.x, k.w1.y], w2 = [k.w2.x, k.w2.y], p1 = [k.p1.x, k.p1.y], p2 = [k.p2.x, k.p2.y];
-    this.a = C.div(C.sub(p2, p1), C.sub(w2, w1));
-    this.b = C.sub(p1, C.mul(this.a, w1));
   }
 
   /** World → canvas pixels (calibration is stored in map-image pixels). */
@@ -484,37 +426,19 @@ class MapView {
     if (this.img) ctx.drawImage(this.img, 0, 0, c.width, c.height);
     else this.drawGrid();
     const scale = c.width / 1200;
-
-    if (this.calibrating || !this.img) {
-      ctx.fillStyle = 'rgba(255,255,255,.55)';
-      for (const p of this.atlas) { const q = this.toPx(p.x, p.y); ctx.fillRect(q.x - 2 * scale, q.y - 2 * scale, 4 * scale, 4 * scale); }
+    if (this.layers.heat && this.heatPoints.length) {
+      this.drawHeat(this.heatPoints.filter((p) => this.visible(p)));
+      return;
     }
-    if (this.layers.heat && this.heatPoints.length) this.drawHeat(this.heatPoints.filter((p) => this.visible(p)));
-    if (!this.layers.heat) {
-      const pts = [...this.points].sort((a, b) => (a.by === 'me') - (b.by === 'me')); // mine on top
-      for (const p of pts) {
-        if (!this.visible(p)) continue;
-        const q = this.toPx(p.x, p.y);
-        const r = (p.by === 'me' ? 5.5 : 4.5) * scale;
-        ctx.fillStyle = p.by === 'me' ? '#ffd84a' : '#4fd6ff';
-        ctx.strokeStyle = '#1b1035'; ctx.lineWidth = 2 * scale;
-        ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      }
+    const pts = [...this.points].sort((a, b) => (a.by === 'me') - (b.by === 'me')); // mine on top
+    for (const p of pts) {
+      if (!this.visible(p)) continue;
+      const q = this.toPx(p.x, p.y);
+      const r = (p.by === 'me' ? 5.5 : 4.5) * scale;
+      ctx.fillStyle = p.by === 'me' ? '#ffd84a' : '#4fd6ff';
+      ctx.strokeStyle = '#1b1035'; ctx.lineWidth = 2 * scale;
+      ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
-    if (this.layers.poi) {
-      ctx.font = `900 ${Math.round(17 * scale)}px "PCC Display", sans-serif`;
-      ctx.textAlign = 'center';
-      for (const p of this.pois) {
-        const q = this.toPx(p.x, p.y);
-        const label = p.name.toUpperCase();
-        const w = ctx.measureText(label).width + 14 * scale;
-        ctx.fillStyle = 'rgba(10,17,80,.85)';
-        ctx.fillRect(q.x - w / 2, q.y - 20 * scale, w, 24 * scale);
-        ctx.fillStyle = '#ffe94d';
-        ctx.fillText(label, q.x, q.y - 2 * scale);
-      }
-    }
-    if (this.calibrating) this.drawHandles();
   }
 
   visible(p) {
@@ -558,88 +482,15 @@ class MapView {
     o.putImageData(data, 0, 0);
     this.ctx.drawImage(off, 0, 0);
   }
-
-  // ---- calibration: two handles pinned to two far-apart known chests; drag them onto the map.
-  startCalibration(hint) {
-    this.calibrating = true;
-    this.hint = hint;
-    const pts = this.atlas.length >= 2 ? this.atlas : this.pois;
-    if (pts.length < 2) {
-      hint.style.display = 'block';
-      hint.textContent = 'Нужно хотя бы 2 известные точки: сыграйте матч и откройте сундуки.';
-      return;
-    }
-    let a = pts[0], b = pts[1], best = -1;
-    for (const p of pts) for (const q of [pts[0], ...pts.slice(-50)]) {
-      const d = (p.x - q.x) ** 2 + (p.y - q.y) ** 2;
-      if (d > best) { best = d; a = p; b = q; }
-    }
-    this.w1 = { x: a.x, y: a.y }; this.w2 = { x: b.x, y: b.y };
-    const pa = this.toPx(a.x, a.y), pb = this.toPx(b.x, b.y);
-    this.h1 = { x: pa.x, y: pa.y }; this.h2 = { x: pb.x, y: pb.y };
-    hint.style.display = 'block';
-    hint.innerHTML = 'Белые точки — все известные сундуки. Перетащите <b class="gold">①</b> и <b class="sea">②</b> так, чтобы точки легли на постройки карты, затем «Сохранить калибровку».';
-    this.onDown = (e) => {
-      const m = this.mouse(e);
-      const lim = 34 * (this.c.width / this.c.clientWidth);
-      const d1 = Math.hypot(m.x - this.h1.x, m.y - this.h1.y), d2 = Math.hypot(m.x - this.h2.x, m.y - this.h2.y);
-      this.drag = d1 < lim ? 1 : d2 < lim ? 2 : 0;
-    };
-    this.onMove = (e) => {
-      if (!this.drag) return;
-      const m = this.mouse(e);
-      if (this.drag === 1) this.h1 = m; else this.h2 = m;
-      this.setTransform(this.imgCalib());
-      this.draw();
-    };
-    this.onUp = () => { this.drag = 0; };
-    this.c.addEventListener('mousedown', this.onDown);
-    window.addEventListener('mousemove', this.onMove);
-    window.addEventListener('mouseup', this.onUp);
-    this.draw();
-  }
-
-  imgCalib() {
-    const k = this.k;
-    return { w1: this.w1, p1: { x: this.h1.x / k, y: this.h1.y / k }, w2: this.w2, p2: { x: this.h2.x / k, y: this.h2.y / k } };
-  }
-
-  async finishCalibration(save) {
-    this.calibrating = false;
-    this.c.removeEventListener('mousedown', this.onDown);
-    window.removeEventListener('mousemove', this.onMove);
-    window.removeEventListener('mouseup', this.onUp);
-    if (this.hint) this.hint.style.display = 'none';
-    if (save && this.w1) {
-      this.calib = this.imgCalib();
-      await post('/api/map/calibration', this.calib);
-    }
-    this.draw();
-  }
-
-  drawHandles() {
-    const { ctx } = this;
-    const s = this.c.width / 1200;
-    [[this.h1, '#ffd84a', '①'], [this.h2, '#4fd6ff', '②']].forEach(([h, col, label]) => {
-      if (!h) return;
-      ctx.strokeStyle = col; ctx.lineWidth = 4 * s;
-      ctx.beginPath(); ctx.arc(h.x, h.y, 16 * s, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(h.x - 26 * s, h.y); ctx.lineTo(h.x + 26 * s, h.y); ctx.moveTo(h.x, h.y - 26 * s); ctx.lineTo(h.x, h.y + 26 * s); ctx.stroke();
-      ctx.fillStyle = col; ctx.font = `900 ${Math.round(22 * s)}px "PCC Display", sans-serif`; ctx.fillText(label, h.x + 30 * s, h.y - 16 * s);
-    });
-  }
-
-  mouse(e) {
-    const r = this.c.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (this.c.width / r.width), y: (e.clientY - r.top) * (this.c.height / r.height) };
-  }
-
-  dispose() { if (this.calibrating) this.finishCalibration(false); }
 }
 
 const lerp = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 
 // ---------------------------------------------------------------- updates (program state)
+
+const size = (bytes) => (bytes >= 1073741824
+  ? `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(bytes / 1073741824)} ГБ`
+  : `${Math.round(bytes / 1048576)} МБ`);
 
 async function renderUpdates() {
   const draw = async () => {
@@ -652,59 +503,32 @@ async function renderUpdates() {
       <div class="grid g2">
         <div class="tile t-rare"><h2>${icon('download')} Программа</h2><div class="kv">
           <div>Версия</div><div><b style="font-family:var(--display);font-size:22px">v${esc(s.version)}</b></div>
-          <div>Обновления</div><div>${esc(s.update.status)}${s.update.checkedUtc ? ` (проверено ${ago(s.update.checkedUtc)})` : ''}</div>
-          <div>Репозиторий</div><div><a href="https://github.com/${esc(s.repo)}" target="_blank" rel="noopener" style="color:#fff">github.com/${esc(s.repo)}</a></div>
-          <div>Автозапуск</div><div>${s.autostart ? 'включён' : 'выключен (включается в меню значка в трее)'}</div>
+          <div>Обновления</div><div>${esc(s.update.status)}</div>
+          <div>Автозапуск</div><div>${s.autostart ? 'включён' : 'выключен'}</div>
         </div>
-        <div style="margin-top:14px;display:flex;gap:12px;flex-wrap:wrap">
-          <button class="primary" id="upd"><span>${icon('refresh')} Проверить обновления</span></button>
-        </div></div>
+        <div style="margin-top:14px"><button class="primary" id="upd"><span>${icon('refresh')} Проверить обновления</span></button></div></div>
         <div class="card"><h2>${icon('chest')} Реплеи</h2><div class="kv">
-          <div>Папка</div><div class="mono">${esc(s.demosDir)}</div>
-          <div>Найдено</div><div>${s.demosFound ? `${n(s.replayFiles)} файлов` : '<span style="color:#ff9a6a">папки нет</span>'}</div>
-          <div>Самый свежий</div><div>${s.newestReplayUtc ? `${dt(s.newestReplayUtc)} (${ago(s.newestReplayUtc)})` : '—'}</div>
-          <div>Fortnite</div><div>${s.fortniteRunning ? 'запущен — реплей посчитается после матча' : 'не запущен'}</div>
-          <div>Очередь</div><div>${p.busy ? `считаю ${n(p.done)} из ${n(p.total || p.pending)}${p.current ? ` · ${esc(p.current)}` : ''}` : 'пусто'}${p.live ? ` · ${n(p.live)} ещё пишется` : ''}</div>
-          <div>Данные</div><div class="mono">${esc(s.dataDir)}</div>
+          <div>В папке Fortnite</div><div>${s.demosFound ? n(s.replayFiles) : 'папки нет'}</div>
+          <div>Сохранено копий</div><div>${n(s.backups)} (${size(s.backupBytes)})</div>
+          <div>Последний</div><div>${s.newestReplayUtc ? `${dt(s.newestReplayUtc)} (${ago(s.newestReplayUtc)})` : '—'}</div>
+          <div>Fortnite</div><div>${s.fortniteRunning ? 'запущен — матч посчитается после окончания' : 'не запущен'}</div>
+          ${p.busy ? `<div>Считаю</div><div>${n(p.done)} из ${n(p.total || p.pending)}</div>` : ''}
         </div>
         <div style="margin-top:14px"><button id="recount"><span>${icon('refresh')} Пересчитать всё</span></button></div></div>
       </div>
-      <div class="card" style="margin-top:18px"><h2>${icon('warn')} Очередь и ошибки разбора</h2>
-        ${s.queue.length ? `${tableHtml('tQueue', [
-          { label: 'Файл', value: (q) => q.file, cls: 'mono', html: (q) => esc(q.file) },
-          { label: 'Состояние', value: (q) => q.status, html: (q) => esc(q.status) },
-          { label: 'Билд Fortnite', value: (q) => q.build, html: (q) => esc(q.build || '') },
-          { label: 'Ошибка', value: (q) => q.error, cls: 'wrap', html: (q) => esc(q.error || '') },
-          { label: 'Попыток', num: true, value: (q) => q.attempts, html: (q) => n(q.attempts) },
-        ], s.queue)}<p class="note">Реплеи с ошибкой пересчитаются сами после обновления программы — ничего не потеряется.</p>` : '<div class="muted">Ошибок нет.</div>'}
-      </div>
-      <div class="grid g2" style="margin-top:18px">
-        <div class="card"><h2>${icon('gear')} Как включить запись повторов</h2>
-          <ol class="steps">
-            <li>В Fortnite откройте меню → <b>Настройки</b>.</li>
-            <li>Вкладка <b>«Игра»</b> (шестерёнка) → раздел <b>«Повторы»</b>.</li>
-            <li>Включите <b>запись повторов</b> для Королевской битвы (Record Replays).</li>
-            <li>Сыграйте матч. После матча реплей появится в <span class="mono">%LOCALAPPDATA%\\FortniteGame\\Saved\\Demos</span>, а счётчик обновится сам.</li>
-          </ol>
-          <p class="note">Fortnite хранит ограниченное число последних повторов и удаляет старые — посчитанные матчи программа помнит, так что удаление реплеев счётчик не уменьшит.</p>
-        </div>
-        <div class="card"><h2>${icon('target')} Настройки подсчёта</h2>
-          <div class="kv">
-            <div>Радиус эвристики</div><div><input type="number" id="rad" min="1" max="100" step="1" value="${s.heuristicRadiusM}" style="width:80px"> м <button class="small" id="saveRad" style="margin-left:6px"><span>Сохранить</span></button></div>
-          </div>
-          <p class="note">Нужен только когда сундук уничтожен неоткрытым, а кто его сломал, в реплее не записано: тогда он засчитывается тому из отряда, кто был не дальше этого радиуса в окне ±2 с. Новый радиус применится к новым матчам и после «Пересчитать всё».</p>
-        </div>
+      <div class="card" style="margin-top:18px"><h2>${icon('gear')} Как включить запись повторов</h2>
+        <ol class="steps">
+          <li>В Fortnite откройте меню → <b>Настройки</b>.</li>
+          <li>Вкладка <b>«Игра»</b> (шестерёнка) → раздел <b>«Повторы»</b>.</li>
+          <li>Включите <b>запись повторов</b> для Королевской битвы.</li>
+          <li>Играйте — после каждого матча счётчик обновится сам.</li>
+        </ol>
       </div>`;
-    bindTables(view);
     $('#recount').addEventListener('click', async (e) => { e.currentTarget.disabled = true; await post('/api/recount'); setTimeout(() => draw().catch(() => {}), 1500); });
     $('#upd').addEventListener('click', async (e) => { const b = e.currentTarget; b.disabled = true; b.querySelector('span').lastChild.textContent = ' Проверяю…'; await post('/api/update/check'); draw().catch(() => {}); });
-    $('#saveRad').addEventListener('click', async (e) => { await post('/api/settings', { heuristicRadiusM: +$('#rad').value }); e.currentTarget.querySelector('span').textContent = 'Сохранено'; });
   };
   await draw();
-  timer = setInterval(() => {
-    if (document.activeElement?.id === 'rad') return;
-    draw().catch(() => {});
-  }, 5000);
+  timer = setInterval(() => draw().catch(() => {}), 5000);
 }
 
 route();

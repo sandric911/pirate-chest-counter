@@ -20,6 +20,12 @@ public sealed class Database
     private readonly string _cs;
     private readonly object _gate = new();
 
+    // Matches and credits are read on every page refresh; keep them in memory until something is written.
+    private int _generation;
+    private int _cacheGeneration = -1;
+    private List<MatchRow> _matchesCache = new();
+    private List<CreditRow> _creditsCache = new();
+
     public Database(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -145,6 +151,9 @@ public sealed class Database
         {
             using var c = Open();
             Exec(c, "UPDATE files SET status='pending', attempts=0 WHERE status IN ('done','error','skipped')");
+            // Also forget which rules counted each match, so replays known only from backups are recounted too.
+            Exec(c, "UPDATE matches SET parser_version=''");
+            _generation++;
         }
     }
 
@@ -211,6 +220,7 @@ public sealed class Database
                 ("$fo", cnt.ForeignChests), ("$bao", cnt.BrokenAfterOpen), ("$un", cnt.UnattributedDestroyed),
                 ("$pv", AppInfo.ParserVersion), ("$pu", Iso(DateTime.UtcNow)), ("$place", m.OwnerPlacement));
 
+            _generation++;
             foreach (var cr in cnt.Credits)
             {
                 Exec(c, "INSERT INTO credits(replay_id,chest_key,class,type,tier,kind,by_who,method,t,x,y,z) VALUES($r,$k,$c,$ty,$ti,$ki,$by,$me,$t,$x,$y,$z)",
@@ -225,6 +235,44 @@ public sealed class Database
     public List<MatchRow> Matches()
     {
         lock (_gate)
+        {
+            EnsureCache();
+            return _matchesCache;
+        }
+    }
+
+    public List<CreditRow> Credits(string? replayId = null)
+    {
+        lock (_gate)
+        {
+            EnsureCache();
+            return replayId == null ? _creditsCache : _creditsCache.Where(c => c.ReplayId == replayId).ToList();
+        }
+    }
+
+    /// <summary>Replay id → (status, parser version) for every stored match, in one query.</summary>
+    public Dictionary<string, (string Status, string ParserVersion)> MatchStates()
+    {
+        lock (_gate)
+        {
+            EnsureCache();
+            return _matchesCache.ToDictionary(m => m.ReplayId, m => (m.Status, m.ParserVersion), StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private void EnsureCache()
+    {
+        if (_cacheGeneration == _generation)
+        {
+            return;
+        }
+        _matchesCache = LoadMatches();
+        _creditsCache = LoadCredits();
+        _cacheGeneration = _generation;
+    }
+
+    private List<MatchRow> LoadMatches()
+    {
         {
             using var c = Open();
             using var cmd = c.CreateCommand();
@@ -250,17 +298,12 @@ public sealed class Database
         }
     }
 
-    public List<CreditRow> Credits(string? replayId = null)
+    private List<CreditRow> LoadCredits()
     {
-        lock (_gate)
         {
             using var c = Open();
             using var cmd = c.CreateCommand();
-            cmd.CommandText = "SELECT replay_id,chest_key,class,type,tier,kind,by_who,method,t,x,y,z FROM credits" + (replayId != null ? " WHERE replay_id=$r" : "");
-            if (replayId != null)
-            {
-                cmd.Parameters.AddWithValue("$r", replayId);
-            }
+            cmd.CommandText = "SELECT replay_id,chest_key,class,type,tier,kind,by_who,method,t,x,y,z FROM credits";
             using var r = cmd.ExecuteReader();
             var list = new List<CreditRow>();
             while (r.Read())
