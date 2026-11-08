@@ -1,0 +1,27 @@
+// Container classes seen in v43.00 replays (Crossbones Isle). First match wins.
+// Role: Chest | TreasureMarker | Ignored.  Type: Normal | Rare | TreasureHunt | Other.
+[
+  { "match": "Tiered_Chest_Athena_C",                    "role": "Chest", "type": "Normal", "rareFromTier": 2 },
+  { "match": "AlwaysSpawn_NormalChest_C",                "role": "Chest", "type": "Normal", "rareFromTier": 2 },
+  { "match": "AlwaysSpawn_RareChest_C",                  "role": "Chest", "type": "Rare" },
+  { "match": "Tiered_Chest_5_Child_C",                   "role": "Chest", "type": "Normal", "rareFromTier": 2 },
+  { "match": "B_TieredChest_Relics_C",                   "role": "Chest", "type": "Other" },
+  { "match": "B_Delilah_TieredChest_Relics_*",           "role": "Chest", "type": "Other" },
+  { "match": "B_Athena_BuriedChest_Chest_C",             "role": "Chest", "type": "Other" },
+  { "match": "B_Athena_BuriedChest_RelicFinder_C",       "role": "Chest", "type": "Other" },
+  { "match": "B_SpritePosters_Booty_Chest*",             "role": "Chest", "type": "Other" },
+  { "match": "Creative_Tiered_Chest_C",                  "role": "Ignored" },
+
+  { "match": "BGA_DelilahTreasureHuntAnimatedChest_C",   "role": "TreasureMarker", "type": "TreasureHunt" },
+
+  { "match": "Tiered_Ammo_Athena_C",                     "role": "Ignored" },
+  { "match": "FoodBox_*",                                "role": "Ignored" },
+  { "match": "Barrel_*",                                 "role": "Ignored" },
+  { "match": "BGA_LootCannon_*",                         "role": "Ignored" },
+  { "match": "BGA_ExtractionPointGameplay_*",            "role": "Ignored" },
+  { "match": "BP_ExtractionSite_*",                      "role": "Ignored" },
+  { "match": "BP_Chests_Cenote_C",                       "role": "Ignored" },
+  { "match": "Prop_*",                                   "role": "Ignored" },
+  { "match": "Athena_Prop_*",                            "role": "Ignored" },
+  { "match": "BP_WaddleJam_*",                           "role": "Ignored" }
+]

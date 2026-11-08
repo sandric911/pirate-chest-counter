@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>PirateChestCounter</AssemblyName>
+    <RootNamespace>PirateChest.App</RootNamespace>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+    <GenerateStaticWebAssetsManifest>false</GenerateStaticWebAssetsManifest>
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <Version>1.0.0</Version>
+    <Product>Pirate Chest Counter</Product>
+    <Company>pirate-chest-counter</Company>
+    <Description>Счётчик сундуков Fortnite по реплеям</Description>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <SatelliteResourceLanguages>ru;en</SatelliteResourceLanguages>
+    <!-- owner/name of the GitHub repo used for updates; CI passes -p:UpdateRepo=$GITHUB_REPOSITORY -->
+    <UpdateRepo Condition="'$(UpdateRepo)' == ''">sandric911/pirate-chest-counter</UpdateRepo>
+  </PropertyGroup>
+
+  <!-- Single self-contained exe. No trimming: the replay parser relies on reflection. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <DebugType>embedded</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="UpdateRepo" Value="$(UpdateRepo)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <!-- pin the native SQLite build: older e_sqlite3 has a known vulnerability (GHSA-2m69-gcr7-jv3q) -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PirateChest.Core\PirateChest.Core.csproj" />
+    <ProjectReference Include="..\PirateChest.ReplayReader\PirateChest.ReplayReader.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Web UI is embedded into the exe and served offline. -->
+    <Content Remove="wwwroot\**" />
+    <EmbeddedResource Include="wwwroot\**\*" LogicalName="wwwroot/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\assets\map.png" LogicalName="wwwroot/map.png" Condition="Exists('..\..\assets\map.png')" />
+    <EmbeddedResource Include="..\..\assets\pois.json" LogicalName="pois.json" Condition="Exists('..\..\assets\pois.json')" />
+    <EmbeddedResource Include="..\..\assets\atlas.json" LogicalName="atlas.json" Condition="Exists('..\..\assets\atlas.json')" />
+    <EmbeddedResource Include="app.ico" LogicalName="app.ico" />
+    <Content Remove="appsettings*.json" />
+  </ItemGroup>
+
+</Project>

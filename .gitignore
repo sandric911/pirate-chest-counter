@@ -1,0 +1,31 @@
+# Build output
+bin/
+obj/
+publish/
+artifacts/
+*.user
+.vs/
+.idea/
+TestResults/
+
+# Reference checkouts (not part of the project)
+_ref/
+
+# Personal data — never commit
+*.replay
+*.db
+*.db-shm
+*.db-wal
+spike-out/
+traces/
+devdata/
+doctor.txt
+log.txt
+instance.json
+# raw (non-anonymized) traces and nicknames / account ids
+*.trace.json
+*nick*
+*account*
+
+# Local tooling
+.claude/settings.local.json

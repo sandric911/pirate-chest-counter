@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Assembly name must contain "ReplayReader": upstream NetFieldParser only scans such assemblies. -->
+    <AssemblyName>PirateChest.ReplayReader</AssemblyName>
+    <NoWarn>$(NoWarn);CS8765;CS8767;CS8604;CS8602</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FortniteReplayReader" Version="3.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PirateChest.Core\PirateChest.Core.csproj" />
+  </ItemGroup>
+
+</Project>

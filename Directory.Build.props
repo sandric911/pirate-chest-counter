@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <DebugType>embedded</DebugType>
+    <Authors>pirate-chest-counter</Authors>
+    <Copyright>MIT</Copyright>
+  </PropertyGroup>
+</Project>
