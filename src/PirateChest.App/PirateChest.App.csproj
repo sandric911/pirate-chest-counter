@@ -17,7 +17,7 @@
     <Version>1.0.0</Version>
     <Product>Pirate Chest Counter</Product>
     <Company>pirate-chest-counter</Company>
-    <Description>Счётчик сундуков Fortnite по реплеям</Description>
+    <Description>Fortnite chest counter from replays</Description>
     <InvariantGlobalization>false</InvariantGlobalization>
     <SatelliteResourceLanguages>ru;en</SatelliteResourceLanguages>
     <!-- owner/name of the GitHub repo used for updates; CI passes -p:UpdateRepo=$GITHUB_REPOSITORY -->
@@ -42,6 +42,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <!-- pin the native SQLite build: older e_sqlite3 has a known vulnerability (GHSA-2m69-gcr7-jv3q) -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
   </ItemGroup>
@@ -59,6 +60,7 @@
     <EmbeddedResource Include="..\..\assets\pois.json" LogicalName="pois.json" Condition="Exists('..\..\assets\pois.json')" />
     <EmbeddedResource Include="..\..\assets\atlas.json" LogicalName="atlas.json" Condition="Exists('..\..\assets\atlas.json')" />
     <EmbeddedResource Include="app.ico" LogicalName="app.ico" />
+    <EmbeddedResource Include="overlay-chest.png" LogicalName="overlay-chest.png" />
     <Content Remove="appsettings*.json" />
   </ItemGroup>
 

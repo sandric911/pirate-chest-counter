@@ -3,8 +3,8 @@ using System.Diagnostics;
 namespace PirateChest.App;
 
 /// <summary>
-/// Only checks whether the Fortnite process is in the process list (no memory reading, no injection,
-/// no overlay). Used for one thing: warning that replay recording seems to be off.
+/// Only checks whether the Fortnite process is in the process list (no memory reading, no injection).
+/// Used to warn that replay recording seems to be off, for the session timer and to show the overlay only in game.
 /// </summary>
 public sealed class FortniteMonitor : IDisposable
 {
@@ -15,10 +15,13 @@ public sealed class FortniteMonitor : IDisposable
 
     public bool Running { get; private set; }
 
+    /// <summary>Raised on a thread-pool thread when Fortnite starts or exits.</summary>
+    public event Action<bool>? RunningChanged;
+
     public FortniteMonitor(Database db)
     {
         _db = db;
-        _timer = new System.Threading.Timer(_ => Poll(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30));
+        _timer = new System.Threading.Timer(_ => Poll(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5));
     }
 
     private void Poll()
@@ -44,7 +47,12 @@ public sealed class FortniteMonitor : IDisposable
                 _db.FortniteStopped(id, DateTime.UtcNow);
                 _runId = null;
             }
+            var changed = running != Running;
             Running = running;
+            if (changed)
+            {
+                RunningChanged?.Invoke(running);
+            }
         }
         catch (Exception ex)
         {

@@ -1,0 +1,64 @@
+<!doctype html>
+<!-- App icon: the Fortnite golden chest (wiki asset) with a ruby "F" in Burbank Big Condensed Black.
+     Rendered to PNG by tools/icon/build_icon.ps1 with headless Edge (transparent background), one size at a time:
+     icon.html?v=<variant>&s=<px>. Variants: center, corner, sticker. -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: "Burbank Big"; src: url(../../src/PirateChest.App/wwwroot/fonts/BurbankBigCondensed-Black.ttf); }
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  #c { position: relative; width: 256px; height: 256px; transform-origin: 0 0; }
+  #chest { position: absolute; object-fit: contain; }
+  svg { position: absolute; left: 0; top: 0; width: 256px; height: 256px; overflow: visible; }
+  text { font-family: "Burbank Big"; }
+</style>
+</head>
+<body>
+<div id="c">
+  <img id="chest" src="../../src/PirateChest.App/wwwroot/img/chest.webp" alt="">
+  <svg viewBox="0 0 256 256">
+    <defs>
+      <!-- faceted ruby: hard colour steps read as cut facets -->
+      <linearGradient id="ruby" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ff9aae"/><stop offset=".16" stop-color="#ff9aae"/>
+        <stop offset=".16" stop-color="#ff3d5f"/><stop offset=".34" stop-color="#ff3d5f"/>
+        <stop offset=".34" stop-color="#c3102f"/><stop offset=".5" stop-color="#c3102f"/>
+        <stop offset=".5" stop-color="#ef2147"/><stop offset=".66" stop-color="#ef2147"/>
+        <stop offset=".66" stop-color="#8e0021"/><stop offset=".82" stop-color="#8e0021"/>
+        <stop offset=".82" stop-color="#d4173b"/><stop offset="1" stop-color="#6a0016"/>
+      </linearGradient>
+      <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/>
+      </linearGradient>
+      <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000" flood-opacity=".55"/>
+      </filter>
+    </defs>
+    <g id="F" filter="url(#shadow)"></g>
+  </svg>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const v = q.get('v') || 'center';
+  const size = +(q.get('s') || 256);
+  document.getElementById('c').style.transform = `scale(${size / 256})`;
+  document.body.style.width = document.body.style.height = `${size}px`;
+  const chest = document.getElementById('chest');
+  // The wiki picture has a soft glow around the chest: crop into it so the chest fills the icon.
+  const place = { center: [-26, -18, 308], corner: [-34, -36, 270], sticker: [-26, -18, 308] }[v];
+  Object.assign(chest.style, { left: `${place[0]}px`, top: `${place[1]}px`, width: `${place[2]}px`, height: `${place[2]}px` });
+  // [x, y baseline, font size, outline]
+  const f = { center: [128, 226, 236, 14], corner: [182, 246, 200, 13], sticker: [128, 226, 228, 12] }[v];
+  const g = document.getElementById('F');
+  const t = (attrs) => `<text x="${f[0]}" y="${f[1]}" font-size="${f[2]}" text-anchor="middle" ${attrs}>F</text>`;
+  g.innerHTML =
+    (v === 'sticker' ? t(`fill="none" stroke="#fff" stroke-width="${f[3] + 14}" stroke-linejoin="round"`) : '') +
+    t(`fill="none" stroke="#2a0008" stroke-width="${f[3]}" stroke-linejoin="round"`) +
+    t('fill="url(#ruby)"') +
+    t('fill="url(#shine)"') +
+    `<path d="M0 0l5 13 13 5-13 5-5 13-5-13-13-5 13-5z" fill="#fff" transform="translate(${f[0] + f[2] * 0.2} ${f[1] - f[2] * 0.66}) scale(${f[2] / 236})"/>`;
+  document.fonts.load(`${f[2]}px "Burbank Big"`).then(() => { document.title = 'ready'; });
+</script>
+</body>
+</html>

@@ -398,6 +398,14 @@ public sealed class ReplayProcessor : IDisposable
             using (var output = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20))
             {
                 input.CopyTo(output);
+                output.Flush(flushToDisk: true);
+            }
+            // A copy that does not match the original is never kept as a backup; the next scan tries again.
+            if (new FileInfo(tmp).Length != length)
+            {
+                File.Delete(tmp);
+                Log.Error($"backup {Path.GetFileName(src)}: copy size differs from the original, will retry");
+                return;
             }
             File.Move(tmp, dest, true);
             File.SetLastWriteTimeUtc(dest, File.GetLastWriteTimeUtc(src));

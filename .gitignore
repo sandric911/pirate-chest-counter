@@ -30,7 +30,5 @@ instance.json
 # Local tooling
 .claude/settings.local.json
 
-# Fonts are licensed: users bring their own (font.ttf next to the data), never commit one
-*.ttf
-*.otf
-*.woff
+# Burbank fonts (House Industries, licensed) live in src/PirateChest.App/wwwroot/fonts.
+# The repo is PRIVATE because of them: do not make it public without removing them from history.

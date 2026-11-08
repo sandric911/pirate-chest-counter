@@ -72,11 +72,10 @@ internal static class Program
         using var mutex = SingleInstance.TryAcquire();
         if (mutex == null)
         {
-            // Already running: just show the statistics.
-            var url = SingleInstance.RunningUrl();
-            if (!background && url != null)
+            // Already running: bring up its window.
+            if (!background)
             {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                SingleInstance.SignalShow();
             }
             return 0;
         }
@@ -86,7 +85,6 @@ internal static class Program
         ApplicationConfiguration.Initialize();
 
         var db = new Database(AppPaths.DbPath);
-        Lang.Load(db);
         var atlas = db.LoadAtlas();
         SeedAtlas(atlas);
         var services = new AppServices
@@ -106,7 +104,7 @@ internal static class Program
         catch (Exception ex)
         {
             Log.Error("web server", ex);
-            MessageBox.Show(Lang.T("Не удалось запустить локальный веб-интерфейс: ", "Could not start the local web interface: ") + ex.Message, AppInfo.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show("Could not start the local interface: " + ex.Message, AppInfo.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
         SingleInstance.Publish(web.Port);
@@ -114,14 +112,12 @@ internal static class Program
 
         using var exitEvent = SingleInstance.CreateExitEvent();
         exitEvent.Reset();
-        var openBrowser = !background && Environment.GetEnvironmentVariable("PCC_NO_BROWSER") != "1";
-        using var tray = new TrayApp(services, web.Url, openBrowser, exitEvent);
+        using var showEvent = SingleInstance.CreateShowEvent();
+        var openWindow = !background && Environment.GetEnvironmentVariable("PCC_NO_BROWSER") != "1";
+        using var tray = new TrayApp(services, web.WindowUrl, web.Url, openWindow, exitEvent, showEvent);
         if (updated)
         {
             Log.Info($"running updated version {AppInfo.VersionText}");
-            var t = new System.Windows.Forms.Timer { Interval = 3000 };
-            t.Tick += (_, _) => { t.Stop(); t.Dispose(); tray.ShowUpdated(); };
-            t.Start();
         }
         Application.Run(tray);
 

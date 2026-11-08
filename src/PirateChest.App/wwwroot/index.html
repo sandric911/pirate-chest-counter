@@ -1,33 +1,50 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Счётчик сундуков</title>
+  <title>Pirate Chest Counter</title>
   <link rel="icon" href="/icon.png">
+  <link rel="preload" href="/fonts/BurbankBigCondensed-Black.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="/fonts/BurbankSmall-Bold.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body>
+<body class="booting">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
       <!-- generic UI glyphs (Fortnite icons come from img/, see docs/ASSETS.md) -->
       <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 1.2a7.6 7.6 0 0 0-7.6 7.6c0 5.7 7.6 14 7.6 14s7.6-8.3 7.6-14A7.6 7.6 0 0 0 12 1.2zm0 4.5a3.1 3.1 0 1 1 0 6.2 3.1 3.1 0 0 1 0-6.2z"/></symbol>
       <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 1.5 23.2 21.6H.8zm-1.3 6.5.4 7.4h1.8l.4-7.4zM12 16.8a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></symbol>
       <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20.5 3.5v7h-7l2.6-2.6A6.6 6.6 0 0 0 5.4 10H2.6a9.4 9.4 0 0 1 15.5-4.3zM3.5 20.5v-7h7l-2.6 2.6a6.6 6.6 0 0 0 10.7-2.1h2.8a9.4 9.4 0 0 1-15.5 4.3z"/></symbol>
+      <symbol id="w-min" viewBox="0 0 12 12"><path d="M1 6.5h10" stroke="currentColor" stroke-width="1.6"/></symbol>
+      <symbol id="w-max" viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+      <symbol id="w-restore" viewBox="0 0 12 12"><path d="M3.5 3.5V1.5h7v7h-2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="1.5" y="3.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+      <symbol id="w-close" viewBox="0 0 12 12"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1.6"/></symbol>
     </defs>
   </svg>
 
-  <header class="top">
-    <a class="brand" href="#/"><img src="/icon.png" alt=""><span data-t="brand">Счётчик сундуков</span></a>
-    <nav class="tabs" id="tabs">
-      <a href="#/" data-tab="" data-t="tabHome">Главная</a>
-      <a href="#/history" data-tab="history" data-t="tabHistory">История</a>
-      <a href="#/efficiency" data-tab="efficiency" data-t="tabEfficiency">Эффективность</a>
-      <a href="#/map" data-tab="map" data-t="tabMap">Карта</a>
-      <a href="#/updates" data-tab="updates" data-t="tabUpdates">Обновления</a>
-    </nav>
-  </header>
-  <main id="view"><div class="loading">…</div></main>
+  <div class="app">
+    <aside class="side" id="side">
+      <nav class="nav" id="tabs">
+        <a href="#/" data-tab="">Home</a>
+        <a href="#/history" data-tab="history">History</a>
+        <a href="#/efficiency" data-tab="efficiency">Efficiency</a>
+        <a href="#/map" data-tab="map">Map</a>
+        <a href="#/overlay" data-tab="overlay">Overlay</a>
+        <a href="#/settings" data-tab="settings">Settings</a>
+      </nav>
+    </aside>
+    <div class="main">
+      <div class="titlebar" id="titlebar">
+        <div class="winbtns" id="winbtns">
+          <button class="wb" data-w="min" title="Minimize"><svg><use href="#w-min"/></svg></button>
+          <button class="wb" data-w="max" title="Maximize"><svg><use href="#w-max"/></svg></button>
+          <button class="wb close" data-w="close" title="Close to tray"><svg><use href="#w-close"/></svg></button>
+        </div>
+      </div>
+      <main id="view" class="view"></main>
+    </div>
+  </div>
   <div class="tip" id="tip"></div>
   <script src="/app.js"></script>
 </body>

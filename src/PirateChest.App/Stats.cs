@@ -83,8 +83,14 @@ public sealed class Stats
             heuristic = new { mine = mine.Count(c => c.Method == nameof(Attribution.Heuristic)), squad = squad.Count(c => c.Method == nameof(Attribution.Heuristic)) },
             matches = counted.Count,
             skipped = matches.Count(m => m.Status == "skipped"),
+            // What the last match added: shown as a green "+N" while it belongs to the current session.
             lastMatch = last == null ? null : new
             {
+                id = last.ReplayId,
+                inSession = sessionIds.Contains(last.ReplayId),
+                isToday = todayIds.Contains(last.ReplayId),
+                byType = types.ToDictionary(t => t, t => mine.Count(c => c.ReplayId == last.ReplayId && c.Type == t)),
+                squadByType = types.ToDictionary(t => t, t => squad.Count(c => c.ReplayId == last.ReplayId && c.Type == t)),
                 startedUtc = last.StartedUtc,
                 endedUtc = last.StartedUtc.AddSeconds(last.LengthSec),
                 mine = last.Mine,
@@ -94,6 +100,19 @@ public sealed class Stats
             progress = new { busy = ps.Current != null || ps.Pending > 0, current = ps.Current, done = ps.BatchDone, total = ps.BatchTotal, pending = ps.Pending, live = ps.Live },
             version = AppInfo.VersionText,
         };
+    }
+
+    /// <summary>The number the overlay shows: my chests in total, in the current session or today.</summary>
+    public int OverlayValue(string show, ProcessorStatus ps, bool fortniteRunning)
+    {
+        var counted = _db.Matches().Where(m => m.Status == "counted").ToList();
+        IEnumerable<MatchRow> pick = show switch
+        {
+            "session" => CurrentSession(counted, fortniteRunning ? ps.LiveSinceUtc : null, DateTime.UtcNow).Matches,
+            "today" => counted.Where(m => Local(m.StartedUtc).Date == DateTime.Now.Date),
+            _ => counted,
+        };
+        return pick.Sum(m => m.Mine);
     }
 
     public sealed record SessionInfo(List<MatchRow> Matches, DateTime? StartedUtc, DateTime? LastEndUtc, bool Playing);

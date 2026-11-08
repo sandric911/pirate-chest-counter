@@ -20,6 +20,12 @@ public sealed class WebServer : IAsyncDisposable
     public int Port { get; private set; }
     public string Url => $"http://127.0.0.1:{Port}/";
 
+    /// <summary>Per-run secret: only the app window (which is given it) can open the UI, not a browser or another program.</summary>
+    public string Token { get; } = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24));
+
+    /// <summary>The address the app window opens first: it trades the token for a cookie and lands on the UI.</summary>
+    public string WindowUrl => $"{Url}__auth?t={Token}";
+
     public static int PickPort()
     {
         for (var p = PreferredPort; p < PreferredPort + 10; p++)
@@ -64,6 +70,8 @@ public sealed class WebServer : IAsyncDisposable
         });
         var app = builder.Build();
         var port = Port;
+        var token = Token;
+        var open = Environment.GetEnvironmentVariable("PCC_DEV_OPEN") == "1"; // development: screenshots from a browser
 
         // Only answer requests addressed to this machine (blocks DNS rebinding), and require a custom
         // header on state-changing requests (a foreign web page cannot send it without CORS, which we never enable).
@@ -71,6 +79,25 @@ public sealed class WebServer : IAsyncDisposable
         {
             var host = ctx.Request.Host.Host;
             if (host is not ("127.0.0.1" or "localhost"))
+            {
+                ctx.Response.StatusCode = 403;
+                return;
+            }
+            if (ctx.Request.Path == "/__auth")
+            {
+                if (ctx.Request.Query["t"] == token)
+                {
+                    ctx.Response.Cookies.Append("pcc", token, new CookieOptions { HttpOnly = true, SameSite = SameSiteMode.Strict, Path = "/" });
+                    ctx.Response.Redirect("/");
+                }
+                else
+                {
+                    ctx.Response.StatusCode = 403;
+                }
+                return;
+            }
+            // /api/ping (name, version, pid) stays open: the installer and --doctor use it to see that the app is up.
+            if (!open && ctx.Request.Path != "/api/ping" && ctx.Request.Cookies["pcc"] != token)
             {
                 ctx.Response.StatusCode = 403;
                 return;
@@ -101,16 +128,36 @@ public sealed class WebServer : IAsyncDisposable
             s.Processor.RecountAll();
             return Results.Ok();
         });
-        app.MapGet("/api/settings", () => Results.Json(new { lang = Lang.Code }));
-        app.MapPost("/api/settings", (SettingsBody body) =>
+        app.MapGet("/api/overlay", () => Results.Json(new
         {
-            if (body.Lang is "ru" or "en")
-            {
-                Lang.Set(s.Db, body.Lang);
-            }
-            return Results.Json(new { lang = Lang.Code });
+            settings = OverlaySettings.Load(s.Db),
+            value = stats.OverlayValue(OverlaySettings.Load(s.Db).Show, s.Processor.Status, s.Fortnite.Running),
+            moving = s.Ui.OverlayMoving,
+            fortniteRunning = s.Fortnite.Running,
+        }));
+        app.MapPost("/api/overlay", (OverlaySettings body) =>
+        {
+            var old = OverlaySettings.Load(s.Db);
+            body.X ??= old.X; // the position is changed by dragging the overlay, not by the form
+            body.Y ??= old.Y;
+            body.Normalized().Save(s.Db);
+            s.Ui.ChangeOverlay(body.Clone());
+            return Results.Json(body);
         });
-        app.MapGet("/user-font", () => UserFont() is { } f ? Results.File(f.Path, f.Type) : Results.NotFound());
+        app.MapPost("/api/overlay/move", (MoveBody body) =>
+        {
+            s.Ui.SetOverlayMove(body.On);
+            return Results.Ok();
+        });
+        app.MapPost("/api/overlay/reset-position", () =>
+        {
+            var o = OverlaySettings.Load(s.Db);
+            o.X = null;
+            o.Y = null;
+            o.Save(s.Db);
+            s.Ui.ChangeOverlay(o.Clone());
+            return Results.Ok();
+        });
         app.MapPost("/api/update/check", async () =>
         {
             await s.Updater.CheckAsync(manual: true);
@@ -156,24 +203,7 @@ public sealed class WebServer : IAsyncDisposable
         };
     }
 
-    public sealed record SettingsBody(string? Lang);
-
-    /// <summary>
-    /// The display font is not shipped (fonts like Fortnite's are licensed). If the user puts their own copy
-    /// next to the data as font.ttf / font.otf / font.woff2 / font.woff, the page uses it for headings and numbers.
-    /// </summary>
-    private static (string Path, string Type)? UserFont()
-    {
-        foreach (var (ext, type) in new[] { ("woff2", "font/woff2"), ("woff", "font/woff"), ("ttf", "font/ttf"), ("otf", "font/otf") })
-        {
-            var p = Path.Combine(AppPaths.DataDir, "font." + ext);
-            if (File.Exists(p))
-            {
-                return (p, type);
-            }
-        }
-        return null;
-    }
+    public sealed record MoveBody(bool On);
 
     /// <summary>Embedded file names, normalised to '/' (MSBuild keeps a backslash for sub-folders such as fonts).</summary>
     private static readonly Dictionary<string, string> Resources = typeof(WebServer).Assembly.GetManifestResourceNames()
@@ -216,6 +246,7 @@ public sealed class WebServer : IAsyncDisposable
             ".ico" => "image/x-icon",
             ".json" => "application/json",
             ".woff2" => "font/woff2",
+            ".ttf" => "font/ttf",
             _ => "application/octet-stream",
         };
         return Results.Stream(stream, type);

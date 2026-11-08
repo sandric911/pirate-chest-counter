@@ -21,8 +21,8 @@ public static class Installer
         var w = new StringWriter();
         var code = Install(w);
         MessageBox.Show(code == 0
-                ? "Счётчик сундуков установлен и запущен.\n\nЗначок — в трее рядом с часами, статистика открылась в браузере. Программа будет запускаться вместе с Windows.\n\nСчитаются только завершённые матчи: включите в Fortnite запись повторов (Настройки → Игра → «Повторы»)."
-                : "Установка не удалась:\n\n" + w,
+                ? "Pirate Chest Counter is installed and running.\n\nIts chest icon is in the tray next to the clock; double-click it to open the window. The program starts with Windows.\n\nOnly finished matches are counted: turn on replay recording in Fortnite (Settings → Game → Replays → Record Replays)."
+                : "Installation failed:\n\n" + w,
             AppInfo.DisplayName, MessageBoxButtons.OK, code == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Error);
         return code;
     }
@@ -101,16 +101,27 @@ public static class Installer
                 w.WriteLine("  ярлык удалён");
             }
 
+            // Even a full uninstall keeps the replay backups (the "replays" folder in the data folder): they are the
+            // only copy of matches Fortnite has already deleted. They can only be removed by hand.
             var dirs = new List<string> { AppPaths.InstallDir };
-            if (purge)
+            var files = new List<string>();
+            if (purge && Directory.Exists(AppPaths.DataDir))
             {
-                dirs.Add(AppPaths.DataDir);
+                foreach (var d in Directory.GetDirectories(AppPaths.DataDir))
+                {
+                    if (!string.Equals(Path.GetFullPath(d), Path.GetFullPath(AppPaths.BackupDir), StringComparison.OrdinalIgnoreCase))
+                    {
+                        dirs.Add(d);
+                    }
+                }
+                files.AddRange(Directory.GetFiles(AppPaths.DataDir));
             }
 
             if (AppPaths.RunningInstalled || purge)
             {
                 // We may be running from the folder being removed: delete after we exit.
-                var cmd = "/c ping 127.0.0.1 -n 3 > nul & " + string.Join(" & ", dirs.Select(d => $"rmdir /s /q \"{d}\""));
+                var steps = dirs.Select(d => $"rmdir /s /q \"{d}\"").Concat(files.Select(f => $"del /f /q \"{f}\""));
+                var cmd = "/c ping 127.0.0.1 -n 3 > nul & " + string.Join(" & ", steps);
                 Detached.Start(Path.Combine(Environment.SystemDirectory, "cmd.exe"), cmd, hidden: true);
                 w.WriteLine($"  папка программы будет удалена через пару секунд: {AppPaths.InstallDir}");
             }
@@ -121,8 +132,8 @@ public static class Installer
             }
 
             w.WriteLine(purge
-                ? $"  данные (база, настройки) удаляются: {AppPaths.DataDir}"
-                : $"  данные оставлены: {AppPaths.DataDir} (удалить вместе с ними: --uninstall --purge)");
+                ? $"  данные (база, настройки) удаляются: {AppPaths.DataDir}; копии реплеев оставлены: {AppPaths.BackupDir}"
+                : $"  данные оставлены: {AppPaths.DataDir} (удалить вместе с ними: --uninstall --purge; копии реплеев остаются всегда)");
             w.WriteLine("  реплеи Fortnite не тронуты.");
             w.WriteLine("Готово.");
             return 0;
@@ -160,7 +171,7 @@ public static class Installer
         using var k = Registry.CurrentUser.CreateSubKey(UninstallKey);
         k.SetValue("DisplayName", AppInfo.DisplayName);
         k.SetValue("DisplayVersion", AppInfo.VersionText);
-        k.SetValue("Publisher", "pirate-chest-counter (неофициальный фанатский инструмент)");
+        k.SetValue("Publisher", "pirate-chest-counter (unofficial fan tool)");
         k.SetValue("DisplayIcon", AppPaths.InstalledExe);
         k.SetValue("InstallLocation", AppPaths.InstallDir);
         k.SetValue("UninstallString", $"\"{AppPaths.InstalledExe}\" --uninstall");
@@ -190,7 +201,7 @@ public static class Installer
             dynamic link = shell.CreateShortcut(ShortcutPath);
             link.TargetPath = AppPaths.InstalledExe;
             link.WorkingDirectory = AppPaths.InstallDir;
-            link.Description = "Счётчик сундуков Fortnite";
+            link.Description = "Fortnite chest counter";
             link.IconLocation = AppPaths.InstalledExe + ",0";
             link.Save();
             return true;
@@ -259,6 +270,22 @@ public static class SingleInstance
     }
 
     public static EventWaitHandle CreateExitEvent() => new(false, EventResetMode.ManualReset, ExitEventName);
+
+    private const string ShowEventName = @"Local\PirateChestCounter.Show";
+
+    /// <summary>Set by a second copy of the program to bring up the running copy's window.</summary>
+    public static EventWaitHandle CreateShowEvent() => new(false, EventResetMode.AutoReset, ShowEventName);
+
+    public static void SignalShow()
+    {
+        if (EventWaitHandle.TryOpenExisting(ShowEventName, out var ev))
+        {
+            using (ev)
+            {
+                ev.Set();
+            }
+        }
+    }
 
     /// <summary>Asks a running instance to exit and waits for it. Returns true if one was running.</summary>
     public static bool StopRunning(TimeSpan timeout)
