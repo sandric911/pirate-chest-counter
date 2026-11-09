@@ -872,13 +872,14 @@ async function renderOverlay() {
         <div class="row"><div class="label">Background opacity</div><div class="ctrl"><input type="range" min="0" max="100" step="5" id="ovOpacity" value="${st.opacity}" style="flex:1"><span class="val" id="ovOpacityV"></span></div></div>
         <div class="row"><div class="label">Chest icon</div><div class="ctrl">${sw('icon')}</div></div>
         <div class="row"><div class="label">Label</div><div class="ctrl">${sw('label')}</div></div>
-        <div class="row"><div class="label">Show</div><div class="ctrl">${seg('when', [['fortnite', 'Only in Fortnite'], ['always', 'Always']])}</div></div>
+        <div class="row"><div class="label">Show</div><div class="ctrl">${seg('when', [['fortnite', 'Only over Fortnite'], ['always', 'Always']])}</div></div>
       </div></div>
       <div>
         <div class="preview" style="background-image:url(/map.png)"><div class="ov" id="ovPreview"></div></div>
-        <div class="hint">The overlay is a separate window on top of the game: it does not touch Fortnite. It shows over the game in
-          <b>Windowed Fullscreen</b> or <b>Windowed</b> display mode. The number updates about half a minute after each match ends.
-          Clicks go through it; use Move to drag it into place.</div>
+        <div class="hint">The overlay is a separate window on top of the game: it does not touch Fortnite. With "Only over Fortnite" it
+          shows only while the Fortnite window is the active one and hides when you switch away. It is visible over the game in
+          <b>Windowed Fullscreen</b> or <b>Windowed</b> display mode. The number updates about half a minute after each match ends;
+          (+N) is what the last match added. Clicks go through it; use Move to drag it into place.</div>
       </div>
     </div>`);
 
@@ -901,11 +902,11 @@ async function renderOverlay() {
     $('#ovOpacityV').textContent = `${st.opacity}%`;
     $('#ovMove').textContent = o.moving ? 'Done' : 'Move';
     $('#ovMove').classList.toggle('primary', o.moving);
-    $('#ovState').textContent = !st.enabled ? 'off' : st.when === 'fortnite' && !o.fortniteRunning ? 'on, appears when Fortnite starts' : 'on';
+    $('#ovState').textContent = !st.enabled ? 'off' : st.when === 'fortnite' ? 'on, shows while the Fortnite window is active' : 'on';
     const label = st.show === 'session' ? 'SESSION' : st.show === 'today' ? 'TODAY' : 'MY CHESTS';
-    const box = `<div class="ovbox ${st.background}" style="--op:${st.opacity / 100}">
+    const box = `<div class="ovbox ${st.background}${st.opacity < 15 ? ' bare' : ''}" style="--op:${st.opacity / 100}">
       ${st.icon ? '<img src="/img/chest.webp" alt="">' : ''}
-      <div>${st.label ? `<div class="ol">${label}</div>` : ''}<div class="on" style="color:${esc(st.color)}">${n(o.value)}</div></div></div>`;
+      <div>${st.label ? `<div class="ol">${label}</div>` : ''}<div class="on" style="color:${esc(st.color)}">${n(o.value)}${o.delta > 0 ? ` <span class="od">(+${n(o.delta)})</span>` : ''}</div></div></div>`;
     const pv = $('#ovPreview');
     pv.innerHTML = box;
     pv.style.transform = `scale(${st.scale / 100})`;

@@ -103,16 +103,28 @@ public sealed class Stats
     }
 
     /// <summary>The number the overlay shows: my chests in total, in the current session or today.</summary>
-    public int OverlayValue(string show, ProcessorStatus ps, bool fortniteRunning)
+    public int OverlayValue(string show, ProcessorStatus ps, bool fortniteRunning) => OverlayNumbers(show, ps, fortniteRunning).Value;
+
+    /// <summary>
+    /// The overlay number and its "(+N)": what the last match added, while that match belongs to the current session
+    /// (and, for "today", was played today). 0 when there is nothing to show.
+    /// </summary>
+    public (int Value, int Delta) OverlayNumbers(string show, ProcessorStatus ps, bool fortniteRunning)
     {
         var counted = _db.Matches().Where(m => m.Status == "counted").ToList();
+        var session = CurrentSession(counted, fortniteRunning ? ps.LiveSinceUtc : null, DateTime.UtcNow);
+        var today = DateTime.Now.Date;
         IEnumerable<MatchRow> pick = show switch
         {
-            "session" => CurrentSession(counted, fortniteRunning ? ps.LiveSinceUtc : null, DateTime.UtcNow).Matches,
-            "today" => counted.Where(m => Local(m.StartedUtc).Date == DateTime.Now.Date),
+            "session" => session.Matches,
+            "today" => counted.Where(m => Local(m.StartedUtc).Date == today),
             _ => counted,
         };
-        return pick.Sum(m => m.Mine);
+        var last = counted.OrderBy(m => m.StartedUtc).LastOrDefault();
+        var delta = last != null && session.Matches.Any(m => m.ReplayId == last.ReplayId) && (show != "today" || Local(last.StartedUtc).Date == today)
+            ? last.Mine
+            : 0;
+        return (pick.Sum(m => m.Mine), delta);
     }
 
     public sealed record SessionInfo(List<MatchRow> Matches, DateTime? StartedUtc, DateTime? LastEndUtc, bool Playing);

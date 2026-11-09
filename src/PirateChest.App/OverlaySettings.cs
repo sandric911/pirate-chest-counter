@@ -7,24 +7,24 @@ public sealed class OverlaySettings
 {
     public const string Key = "overlay";
 
-    /// <summary>Off by default: the overlay is a separate always-on-top window and has to be turned on.</summary>
-    public bool Enabled { get; set; }
+    /// <summary>On by default (the author's choice): only the number, yellow, no background, while Fortnite is active.</summary>
+    public bool Enabled { get; set; } = true;
     /// <summary>total | session | today</summary>
     public string Show { get; set; } = "total";
     /// <summary>Top-left corner in screen pixels; null = top-right corner of the main screen.</summary>
     public int? X { get; set; }
     public int? Y { get; set; }
     /// <summary>Size in percent, 50…300.</summary>
-    public int Scale { get; set; } = 100;
+    public int Scale { get; set; } = 75;
     /// <summary>Number colour as #rrggbb.</summary>
-    public string Color { get; set; } = "#ffffff";
+    public string Color { get; set; } = "#f6d24a";
     /// <summary>none | dark | glass</summary>
-    public string Background { get; set; } = "dark";
+    public string Background { get; set; } = "glass";
     /// <summary>Background opacity in percent, 0…100.</summary>
-    public int Opacity { get; set; } = 60;
-    public bool Icon { get; set; } = true;
-    public bool Label { get; set; } = true;
-    /// <summary>fortnite (only while Fortnite runs) | always</summary>
+    public int Opacity { get; set; }
+    public bool Icon { get; set; }
+    public bool Label { get; set; }
+    /// <summary>fortnite (only while the Fortnite window is the active one) | always</summary>
     public string When { get; set; } = "fortnite";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

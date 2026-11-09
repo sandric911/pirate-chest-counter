@@ -82,6 +82,10 @@ internal static class Program
 
         Log.Info($"start {AppInfo.VersionText} from {AppPaths.CurrentExe} (background={background}, updated={updated})");
         Updater.CleanupLeftovers();
+        if (AppPaths.RunningInstalled && Autostart.IsEnabled())
+        {
+            Autostart.Repair(AppPaths.InstalledExe); // older versions only wrote the Run value, which Windows may skip
+        }
         ApplicationConfiguration.Initialize();
 
         var db = new Database(AppPaths.DbPath);

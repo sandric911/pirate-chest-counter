@@ -20,6 +20,7 @@ public sealed class OverlayWindow : Form
     private OverlaySettings _s;
     private bool _moving;
     private bool _placed;
+    private int _delta;
     private double _shown;
     private double _from;
     private double _to;
@@ -98,6 +99,17 @@ public sealed class OverlayWindow : Form
         _anim.Start();
     }
 
+    /// <summary>"(+N)" after the number: what the last match added (0 hides it).</summary>
+    public void SetDelta(int delta)
+    {
+        if (delta == _delta)
+        {
+            return;
+        }
+        _delta = delta;
+        Render();
+    }
+
     public void SetMoving(bool on)
     {
         _moving = on;
@@ -157,33 +169,45 @@ public sealed class OverlayWindow : Form
             return;
         }
         var k = _s.Scale / 100.0f;
-        var big = MakeFont(true, 46 * k);
-        var small = MakeFont(false, 13 * k);
+        var em = 44 * k;
+        using var num = MakeFont(false, em); // Burbank Small Bold
+        using var small = MakeFont(false, 13 * k);
         var fmt = StringFormat.GenericTypographic;
         using var probe = new Bitmap(1, 1);
         using var pg = Graphics.FromImage(probe);
         pg.TextRenderingHint = TextRenderingHint.AntiAlias;
 
-        // Fixed-width digit cells so the number does not wobble while it rolls.
-        var digitW = Enumerable.Range(0, 10).Max(d => pg.MeasureString(d.ToString(CultureInfo.InvariantCulture), big, PointF.Empty, fmt).Width);
-        var commaW = pg.MeasureString(",", big, PointF.Empty, fmt).Width;
-        var digitH = big.Size * 0.78f; // cap height of Burbank digits
-        var lineH = big.Size * 0.92f;
+        // Without a visible plate the number needs a stronger outline to read over the game.
+        var bare = _s.Background == "none" || _s.Opacity < 15;
+        var outlineW = (bare ? 3.2f : 2f) * k;
+        var margin = outlineW + 1;
+
+        // Fixed-width digit cells so the number does not wobble while it rolls; vertical extents from the glyph outlines.
+        var digitW = Enumerable.Range(0, 10).Max(d => pg.MeasureString(d.ToString(CultureInfo.InvariantCulture), num, PointF.Empty, fmt).Width);
+        var commaW = pg.MeasureString(",", num, PointF.Empty, fmt).Width;
+        var digB = PathBounds("0123456789", num, em, fmt);
+        var rowB = PathBounds("(0123456789+,)", num, em, fmt);
+        var cellH = digB.Height + 2 * margin;
+        var rowTop = Math.Min(rowB.Top - margin, digB.Top - margin);
+        var rowH = Math.Max(rowB.Bottom + margin, digB.Bottom + margin) - rowTop;
+
         var target = (long)Math.Round(Math.Max(_to, _from));
         var digits = Math.Max(1, target.ToString(CultureInfo.InvariantCulture).Length);
-        var groups = (digits - 1) / 3;
-        var numberW = digits * digitW + groups * commaW;
+        var numberW = digits * digitW + (digits - 1) / 3 * commaW;
+        var deltaText = _delta > 0 ? $"(+{_delta.ToString("N0", CultureInfo.InvariantCulture)})" : null;
+        var deltaGap = digitW * 0.3f;
+        var deltaW = deltaText != null ? pg.MeasureString(deltaText, num, PointF.Empty, fmt).Width : 0;
+        var rowW = numberW + (deltaText != null ? deltaGap + deltaW : 0);
+
         var label = LabelText;
         var labelSize = _s.Label ? pg.MeasureString(label, small, PointF.Empty, fmt) : SizeF.Empty;
         var pad = 12 * k;
         var gap = 10 * k;
         var iconS = _s.Icon && Chest != null ? 46 * k : 0;
-        var textW = Math.Max(numberW, labelSize.Width);
-        var textH = lineH + (_s.Label ? labelSize.Height + 2 * k : 0);
-        var w = (int)Math.Ceiling(pad * 2 + (iconS > 0 ? iconS + gap : 0) + textW);
-        var h = (int)Math.Ceiling(pad * 2 + Math.Max(textH, iconS));
-        w = Math.Max(w, 8);
-        h = Math.Max(h, 8);
+        var textW = Math.Max(rowW, labelSize.Width);
+        var textH = rowH + (_s.Label ? labelSize.Height + 2 * k : 0);
+        var w = Math.Max(8, (int)Math.Ceiling(pad * 2 + (iconS > 0 ? iconS + gap : 0) + textW + margin));
+        var h = Math.Max(8, (int)Math.Ceiling(pad * 2 + Math.Max(textH, iconS)));
 
         using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(bmp))
@@ -197,16 +221,16 @@ public sealed class OverlayWindow : Form
             var plate = new RectangleF(0.5f, 0.5f, w - 1, h - 1);
             using var plateP = RoundRect(plate, 10 * k);
             var a = (int)(255 * _s.Opacity / 100.0);
-            if (_s.Background == "dark")
+            if (a > 0 && _s.Background == "dark")
             {
                 using var b = new SolidBrush(Color.FromArgb(a, 8, 14, 32));
                 g.FillPath(b, plateP);
             }
-            else if (_s.Background == "glass")
+            else if (a > 0 && _s.Background == "glass")
             {
                 using var b = new LinearGradientBrush(plate, Color.FromArgb((int)(a * 0.45), 255, 255, 255), Color.FromArgb((int)(a * 0.15), 200, 220, 255), 90f);
                 g.FillPath(b, plateP);
-                using var pen = new Pen(Color.FromArgb(Math.Min(255, a + 40), 255, 255, 255), Math.Max(1, k));
+                using var pen = new Pen(Color.FromArgb((int)(a * 0.8), 255, 255, 255), Math.Max(1, k));
                 g.DrawPath(pen, plateP);
             }
             if (_moving)
@@ -231,52 +255,49 @@ public sealed class OverlayWindow : Form
                 y += labelSize.Height + 2 * k;
             }
 
-            var color = ColorTranslator.FromHtml(_s.Color);
-            var outline = Color.FromArgb(_s.Background == "none" ? 170 : 110, 0, 0, 0);
-            var outlineW = (_s.Background == "none" ? 3.2f : 2f) * k;
-            var top = y + (lineH - digitH) / 2 - big.Size * 0.09f;
-            DrawNumber(g, big, fmt, color, outline, outlineW, x, top, digitW, commaW, digits, lineH);
+            var originY = y - rowTop; // the text origin that puts the top of the row at y
+            using var outline = new Pen(Color.FromArgb(bare ? 170 : 110, 0, 0, 0), outlineW) { LineJoin = LineJoin.Round };
+            using var fill = new SolidBrush(ColorTranslator.FromHtml(_s.Color));
+            var clipTop = originY + digB.Top - margin;
+            DrawNumber(g, num, em, fmt, fill, outline, x, originY, clipTop, cellH, digitW, commaW, digits);
+            if (deltaText != null)
+            {
+                using var green = new SolidBrush(Color.FromArgb(0x5f, 0xe0, 0x8a));
+                DrawGlyph(g, deltaText, num, em, fmt, green, outline, x + numberW + deltaGap, originY, deltaW);
+            }
         }
         Push(bmp);
-        big.Dispose();
-        small.Dispose();
+    }
+
+    private static RectangleF PathBounds(string s, Font font, float em, StringFormat fmt)
+    {
+        using var p = new GraphicsPath();
+        p.AddString(s, font.FontFamily, (int)font.Style, em, PointF.Empty, fmt);
+        return p.GetBounds();
     }
 
     /// <summary>Draws the number as an odometer: each digit cell scrolls when the digit below it rolls over.</summary>
-    private void DrawNumber(Graphics g, Font font, StringFormat fmt, Color fill, Color outline, float outlineW,
-        float x, float y, float digitW, float commaW, int digits, float cellH)
+    private void DrawNumber(Graphics g, Font font, float em, StringFormat fmt, Brush fill, Pen outline,
+        float x, float originY, float clipTop, float cellH, float digitW, float commaW, int digits)
     {
-        using var fillB = new SolidBrush(fill);
-        using var pen = new Pen(outline, outlineW) { LineJoin = LineJoin.Round };
         var v = Math.Max(0, _shown);
-        var emSize = g.DpiY * font.SizeInPoints / 72f;
         var cx = x;
         for (var pos = digits - 1; pos >= 0; pos--)
         {
             var p = Math.Pow(10, pos);
             var whole = Math.Floor(v / p);
             var d = (int)(whole % 10);
-            double f;
-            if (pos == 0)
-            {
-                f = v - Math.Floor(v);
-            }
-            else
-            {
-                var r = v - whole * p;
-                f = Math.Clamp(r - (p - 1), 0, 1);
-            }
-            var cell = new RectangleF(cx, y - cellH * 0.12f, digitW, cellH * 1.1f);
+            var f = pos == 0 ? v - Math.Floor(v) : Math.Clamp(v - whole * p - (p - 1), 0, 1);
             var state = g.Save();
-            g.SetClip(cell);
+            g.SetClip(new RectangleF(cx - 2, clipTop, digitW + 4, cellH));
             var leading = pos > 0 && whole < 1;
             if (!leading)
             {
-                DrawGlyph(g, d.ToString(CultureInfo.InvariantCulture), font, emSize, fmt, fillB, pen, cx, y - (float)f * cellH, digitW);
+                DrawGlyph(g, d.ToString(CultureInfo.InvariantCulture), font, em, fmt, fill, outline, cx, originY - (float)f * cellH, digitW);
             }
             if (f > 0 && (!leading || d == 0))
             {
-                DrawGlyph(g, ((d + 1) % 10).ToString(CultureInfo.InvariantCulture), font, emSize, fmt, fillB, pen, cx, y + (float)(1 - f) * cellH, digitW);
+                DrawGlyph(g, ((d + 1) % 10).ToString(CultureInfo.InvariantCulture), font, em, fmt, fill, outline, cx, originY + (float)(1 - f) * cellH, digitW);
             }
             g.Restore(state);
             cx += digitW;
@@ -284,19 +305,19 @@ public sealed class OverlayWindow : Form
             {
                 if (!leading)
                 {
-                    DrawGlyph(g, ",", font, emSize, fmt, fillB, pen, cx, y, commaW);
+                    DrawGlyph(g, ",", font, em, fmt, fill, outline, cx, originY, commaW);
                 }
                 cx += commaW;
             }
         }
     }
 
-    private static void DrawGlyph(Graphics g, string s, Font font, float emSize, StringFormat fmt, Brush fill, Pen pen, float x, float y, float cellW)
+    private static void DrawGlyph(Graphics g, string s, Font font, float em, StringFormat fmt, Brush fill, Pen outline, float x, float y, float cellW)
     {
         var w = g.MeasureString(s, font, PointF.Empty, fmt).Width;
         using var path = new GraphicsPath();
-        path.AddString(s, font.FontFamily, (int)font.Style, emSize, new PointF(x + (cellW - w) / 2, y), fmt);
-        g.DrawPath(pen, path);
+        path.AddString(s, font.FontFamily, (int)font.Style, em, new PointF(x + (cellW - w) / 2, y), fmt);
+        g.DrawPath(outline, path);
         g.FillPath(fill, path);
     }
 

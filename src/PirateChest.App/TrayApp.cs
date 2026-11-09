@@ -41,6 +41,7 @@ public sealed class TrayApp : ApplicationContext
     private readonly ToolStripMenuItem _overlayItem;
     private readonly SynchronizationContext _ui;
     private readonly System.Windows.Forms.Timer _poll = new() { Interval = 2000 };
+    private readonly System.Windows.Forms.Timer _focus = new() { Interval = 250 };
     private MainWindow? _window;
     private OverlayWindow? _overlay;
     private OverlaySettings _overlaySettings;
@@ -100,6 +101,8 @@ public sealed class TrayApp : ApplicationContext
 
         _poll.Tick += (_, _) => RefreshOverlayValue();
         _poll.Start();
+        _focus.Tick += (_, _) => UpdateOverlayVisibility();
+        _focus.Start();
         UpdateTooltip();
         SyncOverlay();
         if (openWindow)
@@ -136,13 +139,49 @@ public sealed class TrayApp : ApplicationContext
         SyncOverlay();
     }
 
-    private bool OverlayVisible => _s.Ui.OverlayMoving || (_overlaySettings.Enabled && (_overlaySettings.When == "always" || _s.Fortnite.Running));
+    /// <summary>
+    /// True while the Fortnite window is the active one: the foreground window's process id is compared with the ids
+    /// from the process list. Nothing is read from the game, and the game process is never opened.
+    /// </summary>
+    private bool FortniteActive()
+    {
+        var h = NativeMethods.GetForegroundWindow();
+        if (h == IntPtr.Zero)
+        {
+            return false;
+        }
+        NativeMethods.GetWindowThreadProcessId(h, out var pid);
+        return _s.Fortnite.ProcessIds.Contains((int)pid);
+    }
 
-    private int OverlayValue() => _stats.OverlayValue(_overlaySettings.Show, _s.Processor.Status, _s.Fortnite.Running);
+    /// <summary>The overlay window exists while it is turned on (or being moved).</summary>
+    private bool OverlayWanted => _s.Ui.OverlayMoving || _overlaySettings.Enabled;
+
+    /// <summary>It is shown only over an active Fortnite window, unless set to "always" or being moved.</summary>
+    private bool OverlayShown => _s.Ui.OverlayMoving || (_overlaySettings.Enabled && (_overlaySettings.When == "always" || FortniteActive()));
+
+    private (int Value, int Delta) OverlayNumbers() => _stats.OverlayNumbers(_overlaySettings.Show, _s.Processor.Status, _s.Fortnite.Running);
+
+    private void UpdateOverlayVisibility()
+    {
+        if (_overlay == null)
+        {
+            return;
+        }
+        var show = OverlayShown;
+        if (show && !_overlay.Visible)
+        {
+            _overlay.Show();
+        }
+        else if (!show && _overlay.Visible)
+        {
+            _overlay.Hide();
+        }
+    }
 
     private void SyncOverlay()
     {
-        if (!OverlayVisible)
+        if (!OverlayWanted)
         {
             if (_overlay != null)
             {
@@ -154,18 +193,24 @@ public sealed class TrayApp : ApplicationContext
         }
         if (_overlay == null)
         {
-            _overlay = new OverlayWindow(_overlaySettings.Clone(), OverlayValue());
+            _overlay = new OverlayWindow(_overlaySettings.Clone(), OverlayNumbers().Value);
             _overlay.Moved += (x, y) =>
             {
                 _overlaySettings.X = x;
                 _overlaySettings.Y = y;
                 _overlaySettings.Save(_s.Db);
             };
-            _overlay.Show();
+            if (OverlayShown)
+            {
+                _overlay.Show();
+            }
         }
         _overlay.Apply(_overlaySettings.Clone());
         _overlay.SetMoving(_s.Ui.OverlayMoving);
-        _overlay.SetValue(OverlayValue(), animate: false);
+        var (value, delta) = OverlayNumbers();
+        _overlay.SetValue(value, animate: false);
+        _overlay.SetDelta(delta);
+        UpdateOverlayVisibility();
     }
 
     private void SetOverlayMoving(bool on)
@@ -178,7 +223,12 @@ public sealed class TrayApp : ApplicationContext
     {
         try
         {
-            _overlay?.SetValue(OverlayValue(), animate: true);
+            if (_overlay != null)
+            {
+                var (value, delta) = OverlayNumbers();
+                _overlay.SetValue(value, animate: true);
+                _overlay.SetDelta(delta);
+            }
         }
         catch (Exception ex)
         {
@@ -218,6 +268,8 @@ public sealed class TrayApp : ApplicationContext
     {
         _poll.Stop();
         _poll.Dispose();
+        _focus.Stop();
+        _focus.Dispose();
         _overlay?.Close();
         _overlay?.Dispose();
         _window?.Close();

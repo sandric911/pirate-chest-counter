@@ -89,7 +89,16 @@ public sealed class MainWindow : Form
             }
         };
         core.WebMessageReceived += OnMessage;
-        core.NavigationCompleted += (_, _) => PostState();
+        core.NavigationCompleted += async (_, _) =>
+        {
+            PostState();
+            // Development only: run a test script inside the window (the page cannot be reached from outside it).
+            if (Environment.GetEnvironmentVariable("PCC_DEV_SCRIPT") is { } script && File.Exists(script))
+            {
+                var result = await core.ExecuteScriptAsync(await File.ReadAllTextAsync(script));
+                Log.Info("dev script: " + result);
+            }
+        };
         core.Navigate(_startUrl);
     }
 
@@ -102,6 +111,11 @@ public sealed class MainWindow : Form
         }
         catch
         {
+            return;
+        }
+        if (cmd != null && cmd.StartsWith("dbg:", StringComparison.Ordinal) && Environment.GetEnvironmentVariable("PCC_DEV_SCRIPT") != null)
+        {
+            Log.Info("page: " + cmd[4..]);
             return;
         }
         switch (cmd)

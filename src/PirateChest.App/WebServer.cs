@@ -21,7 +21,9 @@ public sealed class WebServer : IAsyncDisposable
     public string Url => $"http://127.0.0.1:{Port}/";
 
     /// <summary>Per-run secret: only the app window (which is given it) can open the UI, not a browser or another program.</summary>
-    public string Token { get; } = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24));
+    public string Token { get; } = Environment.GetEnvironmentVariable("PCC_DEV_TOKEN") is { Length: >= 16 } t
+        ? t // development only: lets a test script open the UI the way the window does
+        : Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24));
 
     /// <summary>The address the app window opens first: it trades the token for a cookie and lands on the UI.</summary>
     public string WindowUrl => $"{Url}__auth?t={Token}";
@@ -99,11 +101,13 @@ public sealed class WebServer : IAsyncDisposable
             // /api/ping (name, version, pid) stays open: the installer and --doctor use it to see that the app is up.
             if (!open && ctx.Request.Path != "/api/ping" && ctx.Request.Cookies["pcc"] != token)
             {
+                Log.Info($"refused {ctx.Request.Method} {ctx.Request.Path}: {(ctx.Request.Cookies.ContainsKey("pcc") ? "stale" : "no")} window key");
                 ctx.Response.StatusCode = 403;
                 return;
             }
             if (!HttpMethods.IsGet(ctx.Request.Method) && !HttpMethods.IsHead(ctx.Request.Method) && ctx.Request.Headers["X-PCC"] != "1")
             {
+                Log.Info($"refused {ctx.Request.Method} {ctx.Request.Path}: no X-PCC header");
                 ctx.Response.StatusCode = 403;
                 return;
             }
@@ -128,13 +132,12 @@ public sealed class WebServer : IAsyncDisposable
             s.Processor.RecountAll();
             return Results.Ok();
         });
-        app.MapGet("/api/overlay", () => Results.Json(new
+        app.MapGet("/api/overlay", () =>
         {
-            settings = OverlaySettings.Load(s.Db),
-            value = stats.OverlayValue(OverlaySettings.Load(s.Db).Show, s.Processor.Status, s.Fortnite.Running),
-            moving = s.Ui.OverlayMoving,
-            fortniteRunning = s.Fortnite.Running,
-        }));
+            var o = OverlaySettings.Load(s.Db);
+            var (value, delta) = stats.OverlayNumbers(o.Show, s.Processor.Status, s.Fortnite.Running);
+            return Results.Json(new { settings = o, value, delta, moving = s.Ui.OverlayMoving, fortniteRunning = s.Fortnite.Running });
+        });
         app.MapPost("/api/overlay", (OverlaySettings body) =>
         {
             var old = OverlaySettings.Load(s.Db);

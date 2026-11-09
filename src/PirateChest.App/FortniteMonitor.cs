@@ -15,6 +15,9 @@ public sealed class FortniteMonitor : IDisposable
 
     public bool Running { get; private set; }
 
+    /// <summary>Ids of the running game processes, from the process list (the game process is never opened).</summary>
+    public IReadOnlySet<int> ProcessIds { get; private set; } = new HashSet<int>();
+
     /// <summary>Raised on a thread-pool thread when Fortnite starts or exits.</summary>
     public event Action<bool>? RunningChanged;
 
@@ -28,16 +31,17 @@ public sealed class FortniteMonitor : IDisposable
     {
         try
         {
-            var running = false;
+            var ids = new HashSet<int>();
             foreach (var name in ProcessNames)
             {
-                var ps = Process.GetProcessesByName(name);
-                running |= ps.Length > 0;
-                foreach (var p in ps)
+                foreach (var p in Process.GetProcessesByName(name))
                 {
+                    ids.Add(p.Id);
                     p.Dispose();
                 }
             }
+            ProcessIds = ids;
+            var running = ids.Count > 0;
             if (running && !Running)
             {
                 _runId = _db.FortniteStarted(DateTime.UtcNow);

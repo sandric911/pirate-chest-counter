@@ -278,11 +278,12 @@ input[type=color] { width: 36px; height: 30px; padding: 0; border: 0; background
 .preview .ov { position: absolute; right: 26px; top: 26px; z-index: 1; transform-origin: top right; }
 .ovbox { display: inline-flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; }
 .ovbox.dark { background: rgba(8, 14, 32, var(--op)); }
-.ovbox.glass { background: linear-gradient(180deg, rgba(255, 255, 255, calc(var(--op) * .45)), rgba(200, 220, 255, calc(var(--op) * .15))); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, calc(var(--op) + .15)); }
+.ovbox.glass { background: linear-gradient(180deg, rgba(255, 255, 255, calc(var(--op) * .45)), rgba(200, 220, 255, calc(var(--op) * .15))); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, calc(var(--op) * .8)); }
 .ovbox img { width: 46px; height: 46px; object-fit: contain; }
 .ovbox .ol { font-family: var(--small); font-size: 13px; color: rgba(255, 255, 255, .8); letter-spacing: .5px; }
-.ovbox .on { font-family: var(--big); font-size: 46px; line-height: .92; -webkit-text-stroke: 2px rgba(0, 0, 0, .45); paint-order: stroke fill; }
-.ovbox.none .on { -webkit-text-stroke: 3px rgba(0, 0, 0, .65); }
+.ovbox .on { font-family: var(--small); font-size: 44px; line-height: 1.05; white-space: nowrap; -webkit-text-stroke: 2px rgba(0, 0, 0, .45); paint-order: stroke fill; }
+.ovbox.none .on, .ovbox.bare .on { -webkit-text-stroke: 3px rgba(0, 0, 0, .65); }
+.ovbox .od { color: var(--green); }
 .hint { color: var(--muted); font-size: 14px; margin-top: 12px; }
 
 /* ---------------------------------------------------------------- misc */
