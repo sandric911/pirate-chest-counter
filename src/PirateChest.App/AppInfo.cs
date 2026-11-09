@@ -11,6 +11,9 @@ public static class AppInfo
     /// <summary>Bump when counting rules change: matches counted with an older version are recounted.</summary>
     public const int RulesVersion = 3; // 3: a chest that comes back into view already searched, with no searcher, is not mine
 
+    /// <summary>Matches shorter than this (replay length) are not kept at all: not counted, not shown, not backed up.</summary>
+    public const int MinMatchSeconds = 90;
+
     public static Version Version { get; } = typeof(AppInfo).Assembly.GetName().Version ?? new Version(0, 0, 0);
     public static string VersionText => $"{Version.Major}.{Version.Minor}.{Version.Build}";
 

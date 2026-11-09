@@ -316,6 +316,15 @@ public sealed class ReplayProcessor : IDisposable
         {
             var trace = ReplayFiles.Parse(path);
             build = trace.Meta.Branch;
+            if (trace.Meta.LengthMs < AppInfo.MinMatchSeconds * 1000L)
+            {
+                // Too short to be a match worth keeping (left on the start island, crashed, …): remember only that
+                // this file was looked at, so it is not parsed again.
+                _db.ForgetMatch(trace.Meta.ReplayId);
+                _db.UpsertFile(path, fi.Length, fi.LastWriteTimeUtc.Ticks, trace.Meta.ReplayId, "skipped", $"shorter than {AppInfo.MinMatchSeconds} s", build);
+                Log.Info($"{fi.Name}: {trace.Meta.LengthMs / 1000} s, shorter than {AppInfo.MinMatchSeconds} s: not kept");
+                return null;
+            }
             lock (_atlas)
             {
                 // Learn chest positions once per replay (a recount must not double the samples).

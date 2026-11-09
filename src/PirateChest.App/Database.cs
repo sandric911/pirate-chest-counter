@@ -64,6 +64,21 @@ public sealed class Database
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);
             CREATE TABLE IF NOT EXISTS fortnite_runs(id INTEGER PRIMARY KEY AUTOINCREMENT, start_utc TEXT, end_utc TEXT);
             """);
+        // Matches too short to keep (stored by older versions): forget them with their chests.
+        Exec(c, "DELETE FROM credits WHERE replay_id IN (SELECT replay_id FROM matches WHERE length_sec < $min)", ("$min", AppInfo.MinMatchSeconds));
+        Exec(c, "DELETE FROM matches WHERE length_sec < $min", ("$min", AppInfo.MinMatchSeconds));
+    }
+
+    /// <summary>Removes a match and its chests (a replay that turned out too short to keep).</summary>
+    public void ForgetMatch(string replayId)
+    {
+        lock (_gate)
+        {
+            using var c = Open();
+            Exec(c, "DELETE FROM credits WHERE replay_id=$r", ("$r", replayId));
+            Exec(c, "DELETE FROM matches WHERE replay_id=$r", ("$r", replayId));
+            _generation++;
+        }
     }
 
     private static void Exec(SqliteConnection c, string sql, params (string, object?)[] ps)
