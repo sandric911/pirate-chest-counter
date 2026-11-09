@@ -27,6 +27,52 @@ public static class Probe
 
         var owner = trace.Players.FirstOrDefault(p => p.IsReplayOwner);
         var recorders = reader.RecorderHistory.Select(r => r.State).ToHashSet();
+
+        // Knock-downs of my pawns, and eliminations from the replay's own event list (no names or ids printed).
+        var myPawns = owner == null ? new HashSet<uint>() : trace.PawnToPlayerState.Where(kv => kv.Value == owner.StateId).Select(kv => kv.Key).ToHashSet();
+        Console.WriteLine("My knock-downs (bIsDBNO):");
+        foreach (var (time, pawn, knocked) in reader.KnockHistory.Where(k => myPawns.Contains(k.Pawn)))
+        {
+            Console.WriteLine($"  {T(time)}  pawn {pawn} {(knocked ? "KNOCKED" : "up again")}");
+        }
+        var squadStates = owner == null ? new HashSet<uint>() : trace.Players.Where(p => p.TeamIndex == owner.TeamIndex).Select(p => p.StateId).ToHashSet();
+        Console.WriteLine($"Knock changes recorded: all pawns {reader.KnockHistory.Count}; squad:");
+        foreach (var (time, pawn, knocked) in reader.KnockHistory.Where(k => trace.PawnToPlayerState.TryGetValue(k.Pawn, out var s) && squadStates.Contains(s)))
+        {
+            Console.WriteLine($"  {T(time)}  pawn {pawn} (state {trace.PawnToPlayerState[pawn]}) {(knocked ? "KNOCKED" : "up again")}");
+        }
+        static object? Prop(object? o, string name) => o?.GetType().GetProperty(name)?.GetValue(o);
+        var pd = replay.PlayerData?.ToList() ?? new();
+        var elims = ((System.Collections.IEnumerable?)Prop(replay, "Eliminations"))?.Cast<object>().ToList() ?? new();
+        Console.WriteLine($"PlayerData entries {pd.Count}, owner flagged {pd.Count(p => p.IsReplayOwner)}; elimination events {elims.Count} (knocks {elims.Count(e => Prop(e, "Knocked") is true)})");
+        // Squad members by team index (ids replaced by slot numbers), and every elimination event that hit them.
+        var teamOf = pd.Select(p => (Id: Prop(p, "EpicId")?.ToString() ?? Prop(p, "PlayerId")?.ToString(), Team: Prop(p, "TeamIndex")?.ToString()))
+            .Where(x => x.Id != null).GroupBy(x => x.Id!, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First().Team, StringComparer.OrdinalIgnoreCase);
+        var squadIds = teamOf.Where(kv => kv.Value == owner?.TeamIndex?.ToString()).Select(kv => kv.Key).ToList();
+        Console.WriteLine($"Squad in PlayerData (team {owner?.TeamIndex}): {squadIds.Count} players; events where a squad member was hit:");
+        foreach (var e in elims)
+        {
+            var victim = (Prop(e, "Eliminated") ?? Prop(Prop(e, "EliminatedInfo"), "Id"))?.ToString() ?? "";
+            var slot = squadIds.FindIndex(x => string.Equals(x, victim, StringComparison.OrdinalIgnoreCase));
+            if (slot >= 0)
+            {
+                Console.WriteLine($"  {Prop(e, "Time")}  squad slot {slot + 1} {(Prop(e, "Knocked") is true ? "knocked" : "eliminated")}");
+            }
+        }
+        var me = replay.PlayerData?.FirstOrDefault(p => p.IsReplayOwner);
+        var myIds = new[] { Prop(me, "EpicId"), Prop(me, "PlayerId") }.Select(x => x?.ToString()).Where(x => !string.IsNullOrEmpty(x)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Console.WriteLine($"PlayerData (me): placement={Prop(me, "Placement")} deathTime={Prop(me, "DeathTime")} deathCause={Prop(me, "DeathCause")}");
+        Console.WriteLine("Elimination events involving me:");
+        foreach (var e in (System.Collections.IEnumerable?)Prop(replay, "Eliminations") ?? Array.Empty<object>())
+        {
+            string? Id(string a, string b) => (Prop(e, a) ?? Prop(Prop(e, b), "Id"))?.ToString();
+            var victim = myIds.Contains(Id("Eliminated", "EliminatedInfo") ?? "");
+            var killer = myIds.Contains(Id("Eliminator", "EliminatorInfo") ?? "");
+            if (victim || killer)
+            {
+                Console.WriteLine($"  {Prop(e, "Time")}  {(victim ? "I was " : "I ")}{(Prop(e, "Knocked") is true ? "knocked" : "eliminated")}{(killer && !victim ? " someone" : "")}");
+            }
+        }
         var team = owner?.TeamIndex;
         Console.WriteLine($"Squad (team {team}) and every state that was ever the recorder:");
         foreach (var p in trace.Players.Where(p => (team != null && p.TeamIndex == team) || recorders.Contains(p.StateId)).OrderBy(p => p.StateId))

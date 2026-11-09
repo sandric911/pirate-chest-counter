@@ -49,6 +49,10 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
     /// <summary>First time each player state carried death tags (diagnostics).</summary>
     public IReadOnlyDictionary<uint, float> DeathTimes => _deathTime;
 
+    /// <summary>Knocked-down state changes of pawns: (replay time, pawn id, knocked) (diagnostics).</summary>
+    public List<(float Time, uint Pawn, bool Knocked)> KnockHistory { get; } = new();
+    private readonly Dictionary<uint, bool> _pawnKnocked = new();
+
     /// <summary>When true, every changed container field is recorded in <see cref="ContainerEvent.Raw"/> (diagnostics only).</summary>
     public bool CaptureRawFields { get; set; }
 
@@ -401,6 +405,11 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
                 if (pawn.PlayerState is { } st && st != 0)
                 {
                     _pawnToState[pawnId] = st;
+                }
+                if (pawn.bIsDBNO is { } knocked && _pawnKnocked.GetValueOrDefault(pawnId) != knocked)
+                {
+                    _pawnKnocked[pawnId] = knocked;
+                    KnockHistory.Add((_time, pawnId, knocked));
                 }
 
                 // The two flags replicate independently: keep each one's last value.
