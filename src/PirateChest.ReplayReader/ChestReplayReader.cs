@@ -43,6 +43,12 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
     public List<ContainerEvent> ContainerEvents { get; } = new();
     public ParseDiagnostics Diagnostics { get; } = new();
 
+    /// <summary>Every change of GameState.RecorderPlayerState: (replay time, player state id).</summary>
+    public List<(float Time, uint State)> RecorderHistory { get; } = new();
+
+    /// <summary>First time each player state carried death tags (diagnostics).</summary>
+    public IReadOnlyDictionary<uint, float> DeathTimes => _deathTime;
+
     /// <summary>When true, every changed container field is recorded in <see cref="ContainerEvent.Raw"/> (diagnostics only).</summary>
     public bool CaptureRawFields { get; set; }
 
@@ -355,6 +361,10 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
             case GameState gs:
                 if (gs.RecorderPlayerState?.Value is { } rec && rec != 0)
                 {
+                    if (_recorderState != rec)
+                    {
+                        RecorderHistory.Add((_time, rec));
+                    }
                     _recorderState = rec;
                 }
                 break;

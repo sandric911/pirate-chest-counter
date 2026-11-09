@@ -66,6 +66,8 @@ public sealed class ChestCredit
     public double? X { get; set; }
     public double? Y { get; set; }
     public double? Z { get; set; }
+    /// <summary>The searching pawn the credit was given by (diagnostics; not stored).</summary>
+    public uint? Pawn { get; set; }
 }
 
 public sealed class MatchCount
@@ -268,6 +270,13 @@ public sealed class MatchCounter
         {
             st.Pawn = pawn == 0 ? null : pawn;
         }
+        else if (e.IsInitial)
+        {
+            // An initial bunch carries the full state, so an absent SearchingPawn means "none known" — not the pawn
+            // of an earlier search of this chest. Otherwise a chest I opened, that the game reset and someone else
+            // searched while it was out of view (e.g. while I was dead and spectating), came back credited to me.
+            st.Pawn = null;
+        }
         if (e.X != null && st.X == null)
         {
             (st.X, st.Y, st.Z) = (e.X, e.Y, e.Z);
@@ -308,10 +317,6 @@ public sealed class MatchCounter
             // comes back unopened was reset while out of view, and its search counter started over.
             st.Searched = e.AlreadySearched == true;
             st.SearchCount = e.SearchCount ?? 0;
-            if (e.SearchingPawn is null)
-            {
-                st.Pawn = null;
-            }
             _ = firstSight;
             return;
         }
@@ -409,6 +414,7 @@ public sealed class MatchCounter
             By = who,
             Method = method,
             Time = s.Time,
+            Pawn = s.Pawn,
         });
         var c = run.Result.Credits[^1];
         if (st.X != null)

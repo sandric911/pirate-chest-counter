@@ -11,6 +11,21 @@ if (args.Length > 0 && args[0] == "analyze")
     PirateChest.Spike.Analyze.Run(args[1]);
     return;
 }
+if (args.Length > 0 && args[0] == "recount")
+{
+    PirateChest.Spike.Recount.Run(args[1]);
+    return;
+}
+if (args.Length > 0 && args[0] == "afterdeath")
+{
+    PirateChest.Spike.AfterDeath.Run(args.Skip(1));
+    return;
+}
+if (args.Length > 0 && args[0] == "probe")
+{
+    PirateChest.Spike.Probe.Run(args[1]);
+    return;
+}
 if (args.Length > 0 && args[0] == "export")
 {
     PirateChest.Spike.Export.Run(args[1], args[2], args[3]);

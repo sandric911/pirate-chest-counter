@@ -209,6 +209,42 @@ public class CountingRulesTests
     }
 
     [Fact]
+    public void ResetByGame_LeftView_ComesBackSearchedWithoutPawn_IsNotMine()
+    {
+        // Real match (2026-11-08 05:30): I open the chest, the game resets it, it leaves relevancy; I die and spectate,
+        // and it comes back (new channel) already searched with no SearchingPawn. Whoever searched it, it was not my
+        // dead pawn: the initial bunch says "no searcher known", so the pawn remembered from my first search must not count.
+        var b = new TraceBuilder().Appear(158, "A", tier: 2).Open(207, "A", MyPawn).Reset(313, "A")
+            .Close(420, "A", CloseReason.Relevancy)
+            .Appear(819, "A", searched: true, tier: 2);
+        var c = new MatchCounter(options: new CountingOptions { CountReopenedAfterReset = true }).Count(b.Build());
+        Assert.Equal(1, c.Mine);
+        Assert.Equal(1, c.MineAndSquad);
+    }
+
+    [Fact]
+    public void ResetByGame_LeftView_ComesBackSearchedByTeammate_CountsForSquad()
+    {
+        var b = new TraceBuilder().Appear(10, "A").Open(60, "A", MyPawn).Reset(300, "A")
+            .Close(400, "A", CloseReason.Relevancy)
+            .Appear(800, "A", searched: true, pawn: MatePawn);
+        var c = new MatchCounter(options: new CountingOptions { CountReopenedAfterReset = true }).Count(b.Build());
+        Assert.Equal(1, c.Mine);
+        Assert.Equal(2, c.MineAndSquad);
+    }
+
+    [Fact]
+    public void ResetByGame_ReopenedBySamePawnInView_StillCounts()
+    {
+        // Real match (2026-11-09 13:27): reset, then searched again by me while in view; SearchingPawn is not resent
+        // because it did not change (same pawn). That second search is mine.
+        var b = new TraceBuilder().Appear(248, "A", tier: 2).Open(439, "A", MyPawn).Reset(520, "A")
+            .Update(617, "A", "Tiered_Chest_Athena_C", e => { e.AlreadySearched = true; e.SearchCount = 1; });
+        var c = new MatchCounter(options: new CountingOptions { CountReopenedAfterReset = true }).Count(b.Build());
+        Assert.Equal(2, c.Mine);
+    }
+
+    [Fact]
     public void ResetAfterStrangerOpened_ThenIOpen_CountsForMe()
     {
         var b = new TraceBuilder().Appear(10, "A").Open(60, "A", OtherPawn).Reset(300, "A").Open(320, "A", MyPawn);

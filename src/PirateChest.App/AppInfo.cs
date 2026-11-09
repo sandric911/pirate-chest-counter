@@ -9,7 +9,7 @@ public static class AppInfo
     public const string ExeName = "PirateChestCounter.exe";
 
     /// <summary>Bump when counting rules change: matches counted with an older version are recounted.</summary>
-    public const int RulesVersion = 2;
+    public const int RulesVersion = 3; // 3: a chest that comes back into view already searched, with no searcher, is not mine
 
     public static Version Version { get; } = typeof(AppInfo).Assembly.GetName().Version ?? new Version(0, 0, 0);
     public static string VersionText => $"{Version.Major}.{Version.Minor}.{Version.Build}";
