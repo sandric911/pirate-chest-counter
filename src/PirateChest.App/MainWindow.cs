@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -7,14 +6,16 @@ using static PirateChest.App.NativeMethods;
 namespace PirateChest.App;
 
 /// <summary>
-/// The app window: the local UI inside WebView2, with our own dark title bar (drawn by the page). It keeps the Windows
-/// behaviour of a normal window: resizing by the edges, Snap, maximize by double-clicking the title bar.
+/// The app window: the local UI inside WebView2, with our own dark title bar (drawn by the page). The window has one
+/// fixed size (the layout is made for it): it can be moved and minimized, not resized or maximized.
 /// Closing it only closes the window; counting and the overlay keep running in the tray.
 /// </summary>
 public sealed class MainWindow : Form
 {
     private const string BoundsKey = "window";
     private static readonly Color Back = Color.FromArgb(0x0a, 0x12, 0x26);
+    /// <summary>Window size at 100% Windows scaling; scaled with the monitor's DPI.</summary>
+    private static readonly Size DesignSize = new(1414, 917);
     private readonly WebView2 _web;
     private readonly Database _db;
     private readonly string _startUrl;
@@ -31,28 +32,34 @@ public sealed class MainWindow : Form
             Icon = icon;
         }
         BackColor = Back;
-        FormBorderStyle = FormBorderStyle.Sizable;
+        FormBorderStyle = FormBorderStyle.Sizable; // keeps the Windows shadow and round corners; the size is locked below
+        MaximizeBox = false;
         StartPosition = FormStartPosition.Manual;
         AutoScaleMode = AutoScaleMode.Dpi;
-        MinimumSize = new Size(980, 640);
         LoadBounds();
 
         _web = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = Back };
         Controls.Add(_web);
-        UpdatePadding();
         Load += async (_, _) => await InitAsync();
-        Resize += (_, _) =>
-        {
-            UpdatePadding();
-            PostState();
-        };
         FormClosing += (_, _) => SaveBounds();
     }
 
-    /// <summary>A thin strip around the page stays ours, so the edges can be grabbed for resizing.</summary>
-    private int Edge => WindowState == FormWindowState.Maximized ? 0 : Math.Max(4, (int)Math.Round(5 * DeviceDpi / 96.0));
+    /// <summary>Locks the window to <see cref="DesignSize"/> at the current DPI (smaller only if the screen is smaller).</summary>
+    private void LockSize()
+    {
+        var area = Screen.FromRectangle(Bounds).WorkingArea;
+        var s = new Size(Math.Min(area.Width, DesignSize.Width * DeviceDpi / 96), Math.Min(area.Height, DesignSize.Height * DeviceDpi / 96));
+        MaximumSize = Size.Empty;
+        MinimumSize = s;
+        MaximumSize = s;
+        Size = s;
+    }
 
-    private void UpdatePadding() => Padding = new Padding(Edge);
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        LockSize();
+    }
 
     private async Task InitAsync()
     {
@@ -91,7 +98,6 @@ public sealed class MainWindow : Form
         core.WebMessageReceived += OnMessage;
         core.NavigationCompleted += async (_, _) =>
         {
-            PostState();
             // Development only: run a test script inside the window (the page cannot be reached from outside it).
             if (Environment.GetEnvironmentVariable("PCC_DEV_SCRIPT") is { } script && File.Exists(script))
             {
@@ -127,24 +133,9 @@ public sealed class MainWindow : Form
             case "min":
                 WindowState = FormWindowState.Minimized;
                 break;
-            case "max":
-                WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
-                break;
             case "close":
                 Close();
                 break;
-        }
-    }
-
-    private void PostState()
-    {
-        try
-        {
-            _web.CoreWebView2?.PostWebMessageAsString(WindowState == FormWindowState.Maximized ? "state:max" : "state:normal");
-        }
-        catch
-        {
-            // not ready
         }
     }
 
@@ -173,70 +164,38 @@ public sealed class MainWindow : Form
     {
         if (m.Msg == WM_NCCALCSIZE && m.WParam != IntPtr.Zero)
         {
-            // The whole window is client area (the page draws its own title bar). When maximized, Windows places the
-            // window past the screen edges by the frame thickness; pull the client area back inside.
-            if (WindowState == FormWindowState.Maximized)
-            {
-                var r = Marshal.PtrToStructure<RECT>(m.LParam);
-                var dpi = GetDpiForWindow(Handle);
-                var pad = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-                var fx = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + pad;
-                var fy = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + pad;
-                r.Left += fx;
-                r.Right -= fx;
-                r.Top += fy;
-                r.Bottom -= fy;
-                Marshal.StructureToPtr(r, m.LParam, false);
-            }
-            m.Result = IntPtr.Zero;
+            m.Result = IntPtr.Zero; // the whole window is client area (the page draws its own title bar)
             return;
         }
-        if (m.Msg == WM_NCHITTEST && WindowState != FormWindowState.Maximized)
+        if (m.Msg == WM_SYSCOMMAND && ((int)m.WParam & 0xFFF0) == SC_MAXIMIZE)
         {
-            var p = PointToClient(new Point(unchecked((short)(long)m.LParam), unchecked((short)((long)m.LParam >> 16))));
-            var e = Edge + 2;
-            var left = p.X < e;
-            var right = p.X >= ClientSize.Width - e;
-            var top = p.Y < e;
-            var bottom = p.Y >= ClientSize.Height - e;
-            m.Result = (top, bottom, left, right) switch
-            {
-                (true, _, true, _) => HTTOPLEFT,
-                (true, _, _, true) => HTTOPRIGHT,
-                (_, true, true, _) => HTBOTTOMLEFT,
-                (_, true, _, true) => HTBOTTOMRIGHT,
-                (true, _, _, _) => HTTOP,
-                (_, true, _, _) => HTBOTTOM,
-                (_, _, true, _) => HTLEFT,
-                (_, _, _, true) => HTRIGHT,
-                _ => HTCLIENT,
-            };
-            return;
+            return; // fixed size: no maximize (Win+Up, double click on the title bar, ...)
         }
         base.WndProc(ref m);
+        if (m.Msg == WM_SIZE && (int)m.WParam == SIZE_MAXIMIZED)
+        {
+            // Maximized some other way (e.g. by another program): put it back. The size cannot change, but the
+            // "maximized" state would pin the window to the screen corner.
+            BeginInvoke(() => ShowWindow(Handle, SW_RESTORE));
+        }
     }
 
+    /// <summary>Saved position. W, H and Max are written for older versions and ignored: the size is fixed.</summary>
     private sealed record Saved(int X, int Y, int W, int H, bool Max);
 
     private void LoadBounds()
     {
         var area = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1600, 900);
-        var w = Math.Min(1360, area.Width - 80);
-        var h = Math.Min(900, area.Height - 80);
-        Bounds = new Rectangle(area.X + (area.Width - w) / 2, area.Y + (area.Height - h) / 2, w, h);
+        Location = area.Location;
+        LockSize();
+        Location = new Point(area.X + (area.Width - Width) / 2, area.Y + (area.Height - Height) / 2);
         try
         {
-            if (_db.Get(BoundsKey) is { } j && JsonSerializer.Deserialize<Saved>(j) is { } s)
+            if (_db.Get(BoundsKey) is { } j && JsonSerializer.Deserialize<Saved>(j) is { } s
+                && Screen.AllScreens.Any(sc => sc.WorkingArea.IntersectsWith(new Rectangle(new Point(s.X, s.Y), Size))))
             {
-                var r = new Rectangle(s.X, s.Y, Math.Max(s.W, MinimumSize.Width), Math.Max(s.H, MinimumSize.Height));
-                if (Screen.AllScreens.Any(sc => sc.WorkingArea.IntersectsWith(r)))
-                {
-                    Bounds = r;
-                }
-                if (s.Max)
-                {
-                    WindowState = FormWindowState.Maximized;
-                }
+                Location = new Point(s.X, s.Y);
+                LockSize(); // the saved spot may be on a smaller screen
             }
         }
         catch (Exception ex)
@@ -250,7 +209,7 @@ public sealed class MainWindow : Form
         try
         {
             var b = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
-            _db.Set(BoundsKey, JsonSerializer.Serialize(new Saved(b.X, b.Y, b.Width, b.Height, WindowState == FormWindowState.Maximized)));
+            _db.Set(BoundsKey, JsonSerializer.Serialize(new Saved(b.X, b.Y, b.Width, b.Height, false)));
         }
         catch (Exception ex)
         {

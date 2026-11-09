@@ -6,6 +6,13 @@ namespace PirateChest.App;
 internal static class NativeMethods
 {
     public const int WM_NCCALCSIZE = 0x0083;
+    public const int WM_SIZE = 0x0005;
+    public const int SIZE_MAXIMIZED = 2;
+    public const int WM_SYSCOMMAND = 0x0112;
+    public const int SC_MAXIMIZE = 0xF030;
+    public const int SW_RESTORE = 9;
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hwnd, int cmd);
     public const int WM_NCHITTEST = 0x0084;
     public const int WM_NCLBUTTONDOWN = 0x00A1;
     public const int WM_EXITSIZEMOVE = 0x0232;

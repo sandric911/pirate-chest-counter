@@ -32,7 +32,6 @@ function applyLang() {
   document.querySelectorAll('#tabs a').forEach((a) => { a.textContent = L(...TABS[a.dataset.tab]); });
   const t = { min: L('Minimize', 'Свернуть'), close: L('Close to tray', 'Закрыть в трей') };
   document.querySelectorAll('.wb').forEach((b) => { if (t[b.dataset.w]) b.title = t[b.dataset.w]; });
-  setMaxTitle();
 }
 
 // ---------------------------------------------------------------- host window (WebView2)
@@ -41,35 +40,16 @@ const host = window.chrome?.webview;
 if (!host) document.body.classList.add('nohost');
 const send = (m) => { try { host?.postMessage(m); } catch { /* not in the app window */ } };
 
-/** Title bar and empty side panel move the window; a quick second press maximizes, like a normal title bar. */
-let lastPress = { t: 0, x: 0, y: 0 };
+/** Title bar and empty side panel move the window (it has a fixed size, so no maximize). */
 function dragArea(el, skip) {
   el.addEventListener('mousedown', (e) => {
     if (e.button !== 0 || (skip && e.target.closest(skip))) return;
-    const now = performance.now();
-    if (now - lastPress.t < 450 && Math.abs(e.screenX - lastPress.x) < 6 && Math.abs(e.screenY - lastPress.y) < 6) {
-      lastPress.t = 0;
-      send('max');
-      return;
-    }
-    lastPress = { t: now, x: e.screenX, y: e.screenY };
     send('drag');
   });
 }
 dragArea(document.getElementById('titlebar'), '.wb');
 dragArea(document.getElementById('side'), 'a');
 document.querySelectorAll('.wb').forEach((b) => b.addEventListener('click', () => send(b.dataset.w)));
-let maximized = false;
-function setMaxTitle() {
-  const b = document.querySelector('.wb[data-w="max"]');
-  b.title = maximized ? L('Restore', 'Восстановить') : L('Maximize', 'Развернуть');
-  b.querySelector('use').setAttribute('href', maximized ? '#w-restore' : '#w-max');
-}
-host?.addEventListener('message', (e) => {
-  if (typeof e.data !== 'string' || !e.data.startsWith('state:')) return;
-  maximized = e.data === 'state:max';
-  setMaxTitle();
-});
 
 // ---------------------------------------------------------------- helpers
 
