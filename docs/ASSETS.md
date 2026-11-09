@@ -14,6 +14,7 @@
 | `chest-rare.png` | редкий сундук | дал автор |
 | `chest-sprite.png` | спрайтовый сундук | дал автор |
 | `crown.webp` | корона Victory Royale | [Fortnite Wiki](https://fortnite.fandom.com/wiki/File:Accolade_Category_Victory_Royale_-_Icon_-_Fortnite.png) |
+| `flag.webp` | флажок «First In Match» (лучший матч) | [Fortnite Wiki](https://fortnite.fandom.com/wiki/File:Accolade_Category_First_In_Match_-_Icon_-_Fortnite.png) |
 | `chest-icon.webp` | значок сундука | [Fortnite Wiki](https://fortnite.fandom.com/wiki/File:Chest_-_Icon_-_Creative.png) |
 | `squads.webp` | значок отряда | [Fortnite Wiki](https://fortnite.fandom.com/wiki/File:Squads_-_Icon_-_Fortnite.png) |
 | `timer.webp` | значок таймера | [Fortnite Wiki](https://fortnite.fandom.com/wiki/File:Timer_-_Icon_-_Fortnite.png) |

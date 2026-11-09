@@ -149,9 +149,11 @@ public sealed class WebServer : IAsyncDisposable
         });
         app.MapPost("/api/overlay", (OverlaySettings body) =>
         {
+            // The position changes only by dragging the overlay (or "reset position"), never by this form: the page
+            // may still hold the coordinates it loaded before a drag, and sending them back would move it back.
             var old = OverlaySettings.Load(s.Db);
-            body.X ??= old.X; // the position is changed by dragging the overlay, not by the form
-            body.Y ??= old.Y;
+            body.X = old.X;
+            body.Y = old.Y;
             body.Normalized().Save(s.Db);
             s.Ui.ChangeOverlay(body.Clone());
             return Results.Json(body);

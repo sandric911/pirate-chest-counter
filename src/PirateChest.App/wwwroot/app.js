@@ -333,13 +333,10 @@ const TYPES = {
 /** Session clock state; the browser clock may differ from the PC clock the server uses. */
 let session = null;
 
-function sessionNote(s, now) {
+function sessionNote(s) {
   if (!s.active) return L('starts with your first match', 'начнётся с первым матчем');
   if (s.playing) return `<span class="live"></span>${L('match in progress', 'идёт матч')}`;
-  if (!s.lastEndUtc) return '';
-  const pause = Math.max(0, Math.floor((now - new Date(s.lastEndUtc).getTime()) / 60000));
-  const left = Math.max(0, s.gapMin - pause);
-  return L(`break ${pause} min, resets in ${left} min`, `перерыв ${pause} мин, сброс через ${left} мин`);
+  return '';
 }
 
 function tickSession() {
@@ -348,8 +345,14 @@ function tickSession() {
   const now = Date.now() + session.offset;
   el.textContent = session.active ? clock(now - new Date(session.startedUtc).getTime()) : '—';
   el.parentElement.classList.toggle('off', !session.active);
-  $('#sessNote').innerHTML = sessionNote(session, now);
+  $('#sessNote').innerHTML = sessionNote(session);
 }
+
+/** Seconds as m:ss (a match is shorter than an hour). */
+const mmss = (sec) => {
+  const t = Math.round(sec ?? 0);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+};
 
 const SEEN_KEY = 'pcc.seenMatch';
 function seenMatch() { try { return localStorage.getItem(SEEN_KEY); } catch { return null; } }
@@ -387,19 +390,21 @@ async function renderHome() {
         <div class="stats small">
           <div class="stat"><div class="v gold">${odoHtml('sMine')}<span class="delta" data-delta="sMine"></span></div><div class="k">${mine}</div></div>
           <div class="stat"><div class="v sea">${odoHtml('sSquad')}<span class="delta" data-delta="sSquad"></span></div><div class="k">${squad}</div></div>
-          <div class="stat"><div class="v">${odoHtml('sMatches')}<span class="delta" data-delta="sMatches"></span></div><div class="k" id="sMatchesK"></div></div></div></div>
+          <div class="stat"><div class="v">${odoHtml('sMatches')}</div><div class="k" id="sMatchesK"></div></div></div></div>
       <div class="panel"><h3>${L('Today', 'Сегодня')}</h3><div class="stats">
         <div class="stat"><div class="v gold">${odoHtml('dMine')}<span class="delta" data-delta="dMine"></span></div><div class="k">${mine}</div></div>
         <div class="stat"><div class="v sea">${odoHtml('dSquad')}<span class="delta" data-delta="dSquad"></span></div><div class="k">${squad}</div></div>
-        <div class="stat"><div class="v">${odoHtml('dMatches')}<span class="delta" data-delta="dMatches"></span></div><div class="k" id="dMatchesK"></div></div></div></div>
+        <div class="stat"><div class="v">${odoHtml('dMatches')}</div><div class="k" id="dMatchesK"></div></div></div></div>
       <div class="panel"><h3>${L('Last match', 'Последний матч')}</h3><div id="lastMatch"></div></div>
     </div>
     <div class="section">
       <h2>${L('By chest type', 'По типам сундуков')}</h2>
       <div class="grid g3">${typeTiles}</div>
       <div class="ministats">
-        <div class="ministat">${wi('crown')}<div><div class="v" id="best"></div><div class="k">${L('best match', 'лучший матч')}</div></div></div>
+        <div class="ministat">${wi('flag')}<div><div class="v" id="best"></div><div class="k">${L('best match', 'лучший матч')}</div></div></div>
         <div class="ministat">${wi('chest-icon')}<div><div class="v" id="perMatch"></div><div class="k">${L('average per match', 'в среднем за матч')}</div></div></div>
+        <div class="ministat" id="winBox">${wi('crown')}<div><div class="v" id="winRate"></div><div class="k" id="winK"></div></div></div>
+        <div class="ministat">${wi('timer')}<div><div class="v" id="avgLen"></div><div class="k">${L('average match length', 'средняя длина игры')}</div></div></div>
       </div>
     </div>`, 'home');
 
@@ -440,6 +445,10 @@ async function renderHome() {
     for (const x of s.byType) view.querySelector(`[data-sub="t${x.type}"]`).textContent = L(`with squad: ${n(x.squad)}`, `с отрядом: ${n(x.squad)}`);
     $('#best').textContent = n(s.best);
     $('#perMatch').textContent = n1(s.perMatch);
+    $('#winRate').textContent = s.placed ? `${n1(s.winRate)}%` : '—';
+    $('#winK').textContent = L(`win rate · ${n(s.wins)} ${pl(s.wins, 'win', 'wins')}`, `винрейт · ${n(s.wins)} ${pl(s.wins, '', '', 'победа', 'победы', 'побед')}`);
+    $('#winBox').title = L(`Victory Royale in ${n(s.wins)} of ${n(s.placed)} matches`, `Победа в ${n(s.wins)} из ${n(s.placed)} ${pl(s.placed, '', '', 'матча', 'матчей', 'матчей')}`);
+    $('#avgLen').textContent = s.matches ? mmss(s.avgLengthSec) : '—';
     $('#lastMatch').innerHTML = lm
       ? `<div class="stat"><div class="v gold">+${n(lm.mine)} <small>${L(`mine · +${n(lm.squad)} with squad`, `мои · +${n(lm.squad)} с отрядом`)}</small></div><div class="d">${esc(lm.mode)} · ${dt(lm.endedUtc)}</div></div>`
       : `<div class="stat"><div class="v muted">—</div><div class="d">${L('no matches yet', 'матчей пока нет')}</div></div>`;
@@ -503,7 +512,7 @@ function barChart(el, rows) {
 
 function lineChart(el, rows) {
   const series = [{ key: 'cumSquad', color: SQUAD, label: L('with squad', 'с отрядом') }, { key: 'cumMine', color: ME, label: L('mine', 'мои') }];
-  const W = 1000, H = 300, Lp = 80, R = 34, T = 16, B = 44;
+  const W = 1000, H = 300, Lp = 80, R = 64, T = 16, B = 44; // R: room for the last date label
   const max = Math.max(1, ...rows.flatMap((r) => series.map((s) => r[s.key])));
   const step = niceStep(max), top = Math.ceil(max / step) * step;
   const x = (i) => Lp + (W - Lp - R) * (rows.length <= 1 ? 0.5 : i / (rows.length - 1));
@@ -581,7 +590,7 @@ async function renderEfficiency() {
     <div class="grid g3">
       <div class="tile stattile">${wi('timer', 'pic')}<div class="value">${n1(o.cpm)}</div><div class="name">${L('Per minute', 'В минуту')}</div><div class="sub">${L('chests per minute in game', 'сундуков за минуту игры')}</div></div>
       <div class="tile stattile">${wi('chest-icon', 'pic')}<div class="value">${n1(o.perMatch)}</div><div class="name">${L('Per match', 'За матч')}</div><div class="sub">${L('on average', 'в среднем')}</div></div>
-      <div class="tile stattile">${wi('crown', 'pic')}<div class="value">${n(o.best)}</div><div class="name">${L('Record', 'Рекорд')}</div><div class="sub">${L('best match', 'лучший матч')}</div></div>
+      <div class="tile stattile">${wi('flag', 'pic')}<div class="value">${n(o.best)}</div><div class="name">${L('Record', 'Рекорд')}</div><div class="sub">${L('best match', 'лучший матч')}</div></div>
     </div>
     <div class="section"><h2>${L('Landing spots', 'Рейтинг мест высадки')}</h2>
       ${tableHtml('tRank', [

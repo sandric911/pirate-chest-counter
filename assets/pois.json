@@ -2,6 +2,7 @@
  {
   "id": "rubber-resort",
   "name": "Rubber Resort",
+  "ru": "Резиновый резорт",
   "x": -23982,
   "y": -46582,
   "px": 230,
@@ -11,6 +12,7 @@
  {
   "id": "the-chest",
   "name": "The Chest",
+  "ru": "Сундук",
   "x": -32345,
   "y": -22764,
   "px": 184,
@@ -20,6 +22,7 @@
  {
   "id": "loot-lagoon",
   "name": "Loot Lagoon",
+  "ru": "Лагуна ларцов",
   "x": 14200,
   "y": -23673,
   "px": 440,
@@ -29,6 +32,7 @@
  {
   "id": "fortunes-fort",
   "name": "Fortune's Fort",
+  "ru": "Форт фортуны",
   "x": 47836,
   "y": -28764,
   "px": 625,
@@ -38,6 +42,7 @@
  {
   "id": "lantern-landing",
   "name": "Lantern Landing",
+  "ru": "Пристань фонарей",
   "x": -11982,
   "y": 3782,
   "px": 296,
@@ -47,6 +52,7 @@
  {
   "id": "arlong-park",
   "name": "Arlong Park",
+  "ru": "Арлонг-парк",
   "x": -51618,
   "y": 14873,
   "px": 78,
@@ -56,6 +62,7 @@
  {
   "id": "cursed-cavern",
   "name": "Cursed Cavern",
+  "ru": "Пещера проклятий",
   "x": 31291,
   "y": 18327,
   "px": 534,
@@ -64,7 +71,8 @@
  },
  {
   "id": "ss-rocky",
-  "name": "The S.S. Rocky",
+  "name": "The $.$. Rocky",
+  "ru": "Яхта A$AP Rocky",
   "x": 66382,
   "y": 28873,
   "px": 727,
@@ -74,6 +82,7 @@
  {
   "id": "loguetown",
   "name": "Loguetown",
+  "ru": "Логтаун",
   "x": 1836,
   "y": 53782,
   "px": 372,
@@ -83,6 +92,7 @@
  {
   "id": "windmill-village",
   "name": "Windmill Village",
+  "ru": "Деревня Фууся",
   "x": -33436,
   "y": 62145,
   "px": 178,
@@ -92,6 +102,7 @@
  {
   "id": "busy-bay",
   "name": "Busy Bay",
+  "ru": "Бухта бывалых",
   "x": 62382,
   "y": 68691,
   "px": 705,
@@ -101,6 +112,7 @@
  {
   "id": "plunder-port",
   "name": "Plunder Port",
+  "ru": "Пристань пиратов",
   "x": 26200,
   "y": 87600,
   "px": 506,
@@ -110,6 +122,7 @@
  {
   "id": "ne-islet",
   "name": "Northeast Islet",
+  "ru": "Островок на северо-востоке",
   "x": 89655,
   "y": -58400,
   "px": 855,

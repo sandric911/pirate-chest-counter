@@ -6,7 +6,14 @@ namespace PirateChest.App;
 public sealed class Poi
 {
     public string Id { get; set; } = "";
+    /// <summary>English name (the game's own, or ours for unnamed spots).</summary>
     public string Name { get; set; } = "";
+    /// <summary>Russian name from the game's Russian localization (ours for unnamed spots).</summary>
+    public string? Ru { get; set; }
+    /// <summary>Renamed by the user: shown as typed, in both languages.</summary>
+    public bool Custom { get; set; }
+    /// <summary>In Russian: "Лагуна ларцов (Loot Lagoon)"; in English, or when renamed: just the name.</summary>
+    public string Display => Lang.En || Custom || string.IsNullOrWhiteSpace(Ru) ? Name : $"{Ru} ({Name})";
     public double X { get; set; }
     public double Y { get; set; }
     /// <summary>Radius in Unreal units.</summary>
@@ -80,6 +87,14 @@ public sealed class Stats
             }),
             best = counted.Count > 0 ? counted.Max(m => m.Mine) : 0,
             perMatch = counted.Count > 0 ? Math.Round(counted.Average(m => m.Mine), 1) : 0,
+            // Win rate over matches whose placement is known (team placement 1 = Victory Royale).
+            wins = counted.Count(m => m.Placement == 1),
+            placed = counted.Count(m => m.Placement > 0),
+            winRate = counted.Any(m => m.Placement > 0)
+                ? Math.Round(100.0 * counted.Count(m => m.Placement == 1) / counted.Count(m => m.Placement > 0), 1)
+                : 0,
+            // How long a match lasted for me: the replay's length, as in History.
+            avgLengthSec = counted.Count > 0 ? Math.Round(counted.Average(m => m.LengthSec)) : 0,
             heuristic = new { mine = mine.Count(c => c.Method == nameof(Attribution.Heuristic)), squad = squad.Count(c => c.Method == nameof(Attribution.Heuristic)) },
             matches = counted.Count,
             skipped = matches.Count(m => m.Status == "skipped"),
@@ -228,6 +243,7 @@ public sealed class Stats
                 if (map.TryGetValue(p.Id, out var n) && !string.IsNullOrWhiteSpace(n))
                 {
                     p.Name = n;
+                    p.Custom = true;
                 }
             }
         }
@@ -267,11 +283,11 @@ public sealed class Stats
         }
         if (best != null && bestRel <= 1)
         {
-            return (best.Id, best.Name, true);
+            return (best.Id, best.Display, true);
         }
         if (best != null && bestRel <= 2.5)
         {
-            return ("near:" + best.Id, Lang.T("Рядом с ", "Near ") + best.Name, false);
+            return ("near:" + best.Id, Lang.T("Рядом: ", "Near ") + best.Display, false);
         }
         if (pois.Count > 0 && pois.Min(p => Math.Sqrt((p.X - x) * (p.X - x) + (p.Y - y) * (p.Y - y))) > 60000)
         {
