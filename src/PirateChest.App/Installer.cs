@@ -63,6 +63,10 @@ public static class Installer
                 w.WriteLine("  ярлык в меню «Пуск»: " + AppInfo.DisplayName);
             }
 
+            // The exe keeps its path across updates, so Explorer would keep showing the icon it cached for the old
+            // version (Start menu, Startup, Apps list); this makes it read the icons again.
+            NativeMethods.SHChangeNotify(NativeMethods.SHCNE_ASSOCCHANGED, NativeMethods.SHCNF_FLUSH, IntPtr.Zero, IntPtr.Zero);
+
             if (!SingleInstance.IsRunning())
             {
                 Detached.Start(AppPaths.InstalledExe);

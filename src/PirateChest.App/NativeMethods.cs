@@ -11,6 +11,10 @@ internal static class NativeMethods
     public const int WM_SYSCOMMAND = 0x0112;
     public const int SC_MAXIMIZE = 0xF030;
     public const int SW_RESTORE = 9;
+    public const int SHCNE_ASSOCCHANGED = 0x08000000;
+    public const uint SHCNF_FLUSH = 0x1000;
+    [DllImport("shell32.dll")]
+    public static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
     [DllImport("user32.dll")]
     public static extern bool ShowWindow(IntPtr hwnd, int cmd);
     public const int WM_NCHITTEST = 0x0084;
