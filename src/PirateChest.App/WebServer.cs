@@ -111,7 +111,11 @@ public sealed class WebServer : IAsyncDisposable
                 ctx.Response.StatusCode = 403;
                 return;
             }
-            ctx.Response.Headers["Cache-Control"] = "no-store";
+            // Map tiles never change under the same address (their URL carries the tile set's version), so the
+            // window keeps them; everything else is always fresh.
+            ctx.Response.Headers["Cache-Control"] = ctx.Request.Path.StartsWithSegments("/maptiles") && ctx.Request.Path.Value!.EndsWith(".webp", StringComparison.Ordinal)
+                ? "private, max-age=31536000, immutable"
+                : "no-store";
             ctx.Response.Headers["X-Content-Type-Options"] = "nosniff";
             ctx.Response.Headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'";
             await next();
@@ -125,7 +129,6 @@ public sealed class WebServer : IAsyncDisposable
         app.MapGet("/api/daily", () => Results.Json(stats.Daily()));
         app.MapGet("/api/efficiency", () => Results.Json(stats.Efficiency()));
         app.MapGet("/api/map/chests", (string? match) => Results.Json(stats.MapChests(string.IsNullOrEmpty(match) ? null : match, s.Atlas)));
-        app.MapGet("/api/map/calibration", () => Results.Text(s.Db.Get("map_calibration") ?? DefaultCalibration(), "application/json"));
         app.MapGet("/api/status", () => Results.Json(StatusInfo(s, stats)));
         app.MapPost("/api/recount", () =>
         {
@@ -183,12 +186,6 @@ public sealed class WebServer : IAsyncDisposable
         await app.StartAsync();
         _app = app;
         Log.Info($"web ui at {Url}");
-    }
-
-    private static string DefaultCalibration()
-    {
-        using var st = typeof(WebServer).Assembly.GetManifestResourceStream("wwwroot/calibration.json");
-        return st == null ? "null" : new StreamReader(st).ReadToEnd();
     }
 
     private static object StatusInfo(AppServices s, Stats stats)

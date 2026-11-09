@@ -102,8 +102,12 @@ const tip = $('#tip');
 function showTip(e, html) {
   tip.innerHTML = html;
   tip.style.display = 'block';
-  tip.style.left = `${e.clientX + 16}px`;
-  tip.style.top = `${e.clientY + 16}px`;
+  // Below-right of the pointer; flipped to the other side near the window's edge.
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  const x = e.clientX + 16 + w > window.innerWidth - 8 ? e.clientX - 16 - w : e.clientX + 16;
+  const y = e.clientY + 16 + h > window.innerHeight - 8 ? e.clientY - 16 - h : e.clientY + 16;
+  tip.style.left = `${Math.max(8, x)}px`;
+  tip.style.top = `${Math.max(8, y)}px`;
 }
 function hideTip() { tip.style.display = 'none'; }
 
@@ -300,6 +304,7 @@ async function route() {
   firstRoute = false;
   if (seq !== routeSeq) return;
   odos = {};
+  view.classList.toggle('fill', fn === renderMap); // the map takes the whole view, without page padding or scroll
   try {
     await fn();
     if (seq !== routeSeq) return;
@@ -615,9 +620,9 @@ async function renderEfficiency() {
   bindTables(view);
 }
 
-// ---------------------------------------------------------------- map
+// ---------------------------------------------------------------- map (Leaflet over map tiles, see tools/assets/build_map_tiles.py)
 
-/** How many times I opened a chest → marker colour and size (CSS px). */
+/** How many times I opened a chest → marker colour and size (CSS px when the whole island is in view). */
 const LOOT_CLASSES = [
   { min: 1, color: '#f4e39a', ink: '#2a2310', r: 4, label: () => L('once', '1 раз') },
   { min: 2, color: '#f0b43c', ink: '#2a2008', r: 6, label: () => '2–3' },
@@ -625,267 +630,378 @@ const LOOT_CLASSES = [
   { min: 7, color: '#d2463e', ink: '#ffffff', r: 8.5, label: () => L('7 or more', '7 и больше') },
 ];
 const lootClass = (k) => [...LOOT_CLASSES].reverse().find((c) => k >= c.min);
+const lerp = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
+
+/**
+ * Layer switches. Out of the box only "My chests" is on; everything else is one click away and the choice is
+ * remembered (WebView2 keeps localStorage between runs).
+ */
+const MAP_PREFS_KEY = 'pcc.map';
+const MAP_DEFAULTS = {
+  me: true, types: { Normal: true, Rare: true, Sprite: true },
+  squad: false, others: false, heat: false,
+  places: false, named: true, landmarks: false,
+  style: 'official', open: { me: true, places: true }, panel: true,
+};
+function loadMapPrefs() {
+  try {
+    const s = JSON.parse(localStorage.getItem(MAP_PREFS_KEY) || 'null');
+    if (s && typeof s === 'object') return { ...MAP_DEFAULTS, ...s, types: { ...MAP_DEFAULTS.types, ...s.types }, open: { ...MAP_DEFAULTS.open, ...s.open } };
+  } catch { /* defaults */ }
+  return structuredClone(MAP_DEFAULTS);
+}
+function saveMapPrefs(p) { try { localStorage.setItem(MAP_PREFS_KEY, JSON.stringify(p)); } catch { /* storage off */ } }
+
+/** Tile set description (assets/maptiles/map.json), loaded once. */
+let mapMeta = null;
+/** Where the map was looking; coming back to the tab keeps the view while the app runs. */
+let mapLastView = null;
+
+/** Map frame: the official 2048 px map; zoom 3 shows one frame pixel per screen pixel. LatLng = [frame y, frame x]. */
+const FRAME_CRS = window.L ? window.L.extend({}, window.L.CRS.Simple, { transformation: new window.L.Transformation(1 / 8, 0, 1 / 8, 0) }) : null;
+
+/**
+ * A chest marker drawn on the shared canvas: a circle, with the number of opens written inside. It grows a little
+ * as you zoom in, so dense clusters come apart and the numbers stay readable.
+ */
+const ChestDot = window.L ? window.L.CircleMarker.extend({
+  _project() {
+    const m = this._map;
+    this._radius = this.options.base * Math.min(2.1, Math.max(0.8, 1 + 0.32 * (m.getZoom() - (m._fitZoom ?? 2.5))));
+    window.L.CircleMarker.prototype._project.call(this);
+  },
+  _updatePath() {
+    window.L.CircleMarker.prototype._updatePath.call(this);
+    const rd = this._renderer;
+    const t = this.options.label;
+    if (!t || !rd._drawing || this._radius < 4.5) return;
+    const ctx = rd._ctx, p = this._point, r = this._radius;
+    ctx.fillStyle = this.options.ink;
+    ctx.font = `${Math.round(r * (t.length > 1 ? 1.2 : 1.45))}px "Burbank Big", Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(t, p.x, p.y + r * 0.08);
+  },
+}) : null;
 
 async function renderMap() {
   const seq = routeSeq;
-  const [matches, status, calib] = await Promise.all([api('/api/matches'), api('/api/status'), api('/api/map/calibration')]);
+  if (!window.L) throw new Error(L('map library did not load', 'не загрузилась библиотека карты'));
+  const [matches, meta] = await Promise.all([api('/api/matches'), mapMeta ?? api('/maptiles/map.json')]);
   if (seq !== routeSeq) return;
+  mapMeta = meta;
   const counted = matches.filter((m) => m.status === 'counted');
-  view.innerHTML = page(`
-    <h1>${L('Map', 'Карта')}</h1>
-    <div class="maplayout">
-      <div class="mapcol"><div class="mapframe"><canvas id="mapc" width="1200" height="1200"></canvas>
-        <div class="zoom"><button class="icon" id="zIn" title="${L('Zoom in', 'Приблизить')}">+</button><button class="icon" id="zOut" title="${L('Zoom out', 'Отдалить')}">−</button></div>
-        ${status.hasMap ? `<div class="credit">${L('Map: Fortnite © Epic Games', 'Карта: Fortnite © Epic Games')}</div>` : ''}</div></div>
-      <div class="mapside">
-        <div class="panel">
-          <h3>${L('Show', 'Что показать')}</h3>
-          <select id="mMatch"><option value="">${L('All matches', 'Все матчи')}</option>${counted.map((m) => `<option value="${esc(m.id)}">${dt(m.startedUtc)} · ${esc(m.mode)} · ${n(m.mine)}</option>`).join('')}</select>
-          <select id="mType"><option value="">${L('All chest types', 'Все типы сундуков')}</option>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v.name()}</option>`).join('')}</select>
-          <div class="layers">
-            <label class="chk"><input type="checkbox" id="lMe" checked> ${L('opened by me', 'открытые мной')}</label>
-            <label class="chk"><input type="checkbox" id="lSquad" checked> ${L('opened only by squad', 'открытые только отрядом')}</label>
-            <label class="chk"><input type="checkbox" id="lOther" checked> ${L('other chests', 'остальные сундуки')}</label>
-            <label class="chk"><input type="checkbox" id="lHeat"> ${L('heat map', 'тепловая карта')}</label>
-          </div>
-        </div>
-        <div class="panel">
-          <h3>${L('How many times I opened', 'Сколько раз я открыл')}</h3>
-          <div class="maplegend">
-            ${LOOT_CLASSES.map((c) => `<div><span class="sw"><span class="mk" style="width:${2 * c.r + 2}px;height:${2 * c.r + 2}px;background:${c.color}"></span></span>${c.label()}</div>`).join('')}
-            <div><span class="sw"><span class="mk" style="width:10px;height:10px;background:rgba(0,0,0,.35);border:2px solid var(--squad)"></span></span>${L('squad only', 'только отряд')}</div>
-            <div><span class="sw"><span class="mk" style="width:5px;height:5px;background:rgba(205,212,224,.7);border:0"></span></span>${L('others', 'остальные')}</div>
-          </div>
-          <div class="maphint">${L('The number is how many times. Scroll to zoom, drag to move the map.', 'Цифра на кружке — сколько раз. Колёсико мыши приближает, карту можно двигать.')}</div>
-        </div>
-        <div class="panel" id="mStats"></div>
-      </div>
-    </div>`);
+  const P = loadMapPrefs();
+  if (!meta.styles.some((s) => s.id === P.style)) P.style = meta.styles[0].id;
 
-  const mv = new MapView($('#mapc'), status.hasMap, calib);
-  current = mv;
+  const sw = (key, on, cls = '') => `<button class="switch ${cls}${on ? ' on' : ''}" data-l="${key}" role="switch" aria-checked="${on}"></button>`;
+  const caret = (g) => `<button class="caret${P.open[g] ? ' open' : ''}" data-open="${g}" title="${L('Show more', 'Подробнее')}"><svg class="ico"><use href="#i-chev"/></svg></button>`;
+  view.innerHTML = page(`
+    <div class="mapshell${P.panel ? '' : ' collapsed'}" id="mapShell">
+      <aside class="mappanel"><div class="mpscroll">
+        <select id="mMatch"><option value="">${L('All matches', 'Все матчи')}</option>${counted.map((m) => `<option value="${esc(m.id)}">${dt(m.startedUtc)} · ${esc(m.mode)} · ${n(m.mine)}</option>`).join('')}</select>
+        <div class="msearch">${icon('search')}<input id="mSearch" type="text" placeholder="${L('Search places…', 'Поиск мест…')}" autocomplete="off" spellcheck="false"><div class="mresults" id="mResults"></div></div>
+
+        <div class="lgroup">
+          <div class="lrow lhead">${sw('me', P.me)}<span class="lname">${L('My chests', 'Мои сундуки')}</span><span class="lcount" id="cMe"></span>${caret('me')}</div>
+          <div class="lsub${P.open.me ? ' open' : ''}${P.me ? '' : ' dim'}" data-sub="me"><div>
+            ${Object.entries(TYPES).map(([k, v]) => `<div class="lrow">${sw(`type:${k}`, P.types[k], 'sm')}<img class="lpic" src="${v.img}" alt=""><span class="lname">${esc(v.name())}</span><span class="lcount" data-count="${k}"></span></div>`).join('')}
+            <div class="maplegend"><div class="lhint">${L('How many times I opened', 'Сколько раз я открыл')}</div>
+              ${LOOT_CLASSES.map((c) => `<div><span class="sw"><span class="mk" style="width:${2 * c.r + 2}px;height:${2 * c.r + 2}px;background:${c.color}"></span></span>${c.label()}</div>`).join('')}
+            </div>
+          </div></div>
+        </div>
+        <div class="lgroup">
+          <div class="lrow lhead">${sw('squad', P.squad)}<span class="lname">${L('Squad only', 'Только отряд')}</span><span class="lcount" id="cSquad"></span><span class="mk lmk sq"></span></div>
+          <div class="lnote">${L('opened by teammates, not by me', 'открывали тиммейты, но не я')}</div>
+        </div>
+        <div class="lgroup">
+          <div class="lrow lhead">${sw('others', P.others)}<span class="lname">${L('Other chests', 'Остальные сундуки')}</span><span class="lcount" id="cOthers"></span><span class="mk lmk ot"></span></div>
+          <div class="lnote">${L('chest spots nobody in the squad has opened', 'места сундуков, которые никто из отряда не открывал')}</div>
+        </div>
+        <div class="lgroup">
+          <div class="lrow lhead">${sw('heat', P.heat)}<span class="lname">${L('Heat map', 'Тепловая карта')}</span><span class="lheat"></span></div>
+          <div class="lnote">${L('where I open the most; shown instead of the chest markers', 'где я открываю больше всего; вместо значков сундуков')}</div>
+        </div>
+        <div class="lgroup">
+          <div class="lrow lhead">${sw('places', P.places)}<span class="lname">${L('Locations', 'Места')}</span>${caret('places')}</div>
+          <div class="lsub${P.open.places ? ' open' : ''}${P.places ? '' : ' dim'}" data-sub="places"><div>
+            <div class="lrow">${sw('named', P.named, 'sm')}<span class="lname">${L('Named locations', 'Названные места')}</span></div>
+            <div class="lrow">${sw('landmarks', P.landmarks, 'sm')}<span class="lname">${L('Landmarks', 'Ориентиры')}</span></div>
+          </div></div>
+        </div>
+        ${meta.styles.length > 1 ? `<div class="lgroup"><h3>${L('Map style', 'Вид карты')}</h3>
+          <div class="seg" id="mStyle">${meta.styles.map((s) => `<button data-v="${esc(s.id)}" class="${s.id === P.style ? 'on' : ''}">${esc(L(s.name, s.ru))}</button>`).join('')}</div></div>` : ''}
+        <div class="lgroup" id="mStats"></div>
+      </div></aside>
+      <div class="mapbox" id="mapBox">
+        <div id="lmap"></div>
+        <button class="mbtn mcollapse" id="mCollapse" title="${L('Hide or show the panel', 'Скрыть или показать панель')}"><svg class="ico"><use href="#i-chev"/></svg></button>
+        <div class="mzoom">
+          <button class="mbtn" id="zIn" title="${L('Zoom in', 'Приблизить')}"><svg class="ico"><use href="#i-plus"/></svg></button>
+          <button class="mbtn" id="zOut" title="${L('Zoom out', 'Отдалить')}"><svg class="ico"><use href="#i-minus"/></svg></button>
+          <button class="mbtn" id="zFit" title="${L('Whole island', 'Весь остров')}"><svg class="ico"><use href="#i-fit"/></svg></button>
+        </div>
+        <div class="mcredit">${L('Map: ', 'Карта: ')}${esc(meta.credit)}</div>
+      </div>
+    </div>`, 'mappage');
+
+  const cm = new ChestMap($('#lmap'), meta, P);
+  current = cm;
+  const save = () => saveMapPrefs(P);
+
+  // Switches: groups and sub-switches.
+  view.querySelectorAll('.mappanel [data-l]').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.l;
+    let on;
+    if (k.startsWith('type:')) on = P.types[k.slice(5)] = !P.types[k.slice(5)];
+    else on = P[k] = !P[k];
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+    const sub = view.querySelector(`[data-sub="${k}"]`);
+    if (sub) sub.classList.toggle('dim', !on);
+    if (on && sub && !P.open[k]) { P.open[k] = true; sub.classList.add('open'); view.querySelector(`[data-open="${k}"]`)?.classList.add('open'); }
+    save();
+    if (['places', 'named', 'landmarks'].includes(k)) cm.drawPlaces();
+    else cm.drawChests();
+    renderMapCounts(cm);
+  }));
+  view.querySelectorAll('.mappanel [data-open]').forEach((b) => b.addEventListener('click', () => {
+    const g = b.dataset.open;
+    P.open[g] = !P.open[g];
+    b.classList.toggle('open', P.open[g]);
+    view.querySelector(`[data-sub="${g}"]`).classList.toggle('open', P.open[g]);
+    save();
+  }));
+  $('#mStyle')?.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b || b.dataset.v === P.style) return;
+    P.style = b.dataset.v;
+    $('#mStyle').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    save();
+    cm.setStyle();
+  });
+  $('#mCollapse').addEventListener('click', () => {
+    P.panel = !P.panel;
+    $('#mapShell').classList.toggle('collapsed', !P.panel);
+    save();
+  });
+  $('#mapShell').addEventListener('transitionend', (e) => { if (e.target.classList.contains('mappanel')) cm.map.invalidateSize({ pan: false }); });
+  $('#zIn').addEventListener('click', () => cm.map.zoomIn());
+  $('#zOut').addEventListener('click', () => cm.map.zoomOut());
+  $('#zFit').addEventListener('click', () => cm.fit(true));
+  bindPlaceSearch(cm);
+
   const reload = async () => {
     const id = $('#mMatch').value;
-    mv.data = await api(`/api/map/chests${id ? `?match=${encodeURIComponent(id)}` : ''}`);
-    mv.draw();
-    renderMapStats(mv);
+    const data = await api(`/api/map/chests${id ? `?match=${encodeURIComponent(id)}` : ''}`);
+    if (seq !== routeSeq) return;
+    cm.data = data;
+    cm.matchFilter = !!id;
+    cm.drawChests();
+    renderMapCounts(cm);
   };
-  const sync = () => {
-    mv.layers = { me: $('#lMe').checked, squad: $('#lSquad').checked, other: $('#lOther').checked, heat: $('#lHeat').checked, type: $('#mType').value };
-    mv.draw();
-    renderMapStats(mv);
-  };
-  $('#mMatch').addEventListener('change', () => reload());
-  ['mType', 'lMe', 'lSquad', 'lOther', 'lHeat'].forEach((id) => $(`#${id}`).addEventListener('change', sync));
-  $('#zIn').addEventListener('click', () => mv.zoomAt(1.5));
-  $('#zOut').addEventListener('click', () => mv.zoomAt(1 / 1.5));
-  await mv.ready;
-  mv.fit();
-  sync();
+  $('#mMatch').addEventListener('change', () => reload().catch(() => {}));
+  cm.drawPlaces();
+  renderMapCounts(cm);
   await reload();
 }
 
-function renderMapStats(mv) {
-  const list = mv.data.chests.filter((c) => c.me > 0 && (!mv.layers.type || c.type === mv.layers.type));
-  const total = list.reduce((a, c) => a + c.me, 0);
-  const top = list.reduce((a, c) => Math.max(a, c.me), 0);
-  const again = list.filter((c) => c.me > 1).length;
+/** Numbers next to the switches and the "Opened by me" box. */
+function renderMapCounts(cm) {
+  const P = cm.prefs;
+  const chests = cm.data.chests;
+  const mine = chests.filter((c) => c.me > 0 && P.types[c.type] !== false);
+  const total = mine.reduce((a, c) => a + c.me, 0);
+  const top = mine.reduce((a, c) => Math.max(a, c.me), 0);
+  const again = mine.filter((c) => c.me > 1).length;
+  $('#cMe').textContent = n(total);
+  for (const k of Object.keys(TYPES)) {
+    const el = view.querySelector(`[data-count="${k}"]`);
+    if (el) el.textContent = n(chests.filter((c) => c.type === k).reduce((a, c) => a + c.me, 0));
+  }
+  $('#cSquad').textContent = n(chests.filter((c) => c.me === 0 && c.squad > 0 && P.types[c.type] !== false).length);
+  $('#cOthers').textContent = n(cm.data.others.length);
   $('#mStats').innerHTML = `<h3>${L('Opened by me', 'Открыто мной')}</h3>
     <div class="kv">
-      <div>${L('Different chests', 'Разных сундуков')}</div><div class="num">${n(list.length)}</div>
+      <div>${L('Different chests', 'Разных сундуков')}</div><div class="num">${n(mine.length)}</div>
       <div>${L('Total opens', 'Всего открытий')}</div><div class="num">${n(total)}</div>
       <div>${L('Opened again', 'Открывал повторно')}</div><div class="num">${n(again)}</div>
       <div>${L('Most often', 'Чаще всего')}</div><div class="num">${top ? `${n(top)} ${timesW(top)}` : '—'}</div>
-    </div>`;
+    </div>
+    <div class="maphint">${L('Scroll or double-click to zoom, drag to move. Hover a chest for details.', 'Колёсико или двойной щелчок — приблизить, перетаскивание — двигать карту. Наведите на сундук — подробности.')}</div>`;
 }
 
-/** Complex numbers for the 2-point similarity transform world (X + iY) → image pixel (px + i·py). */
-const C = {
-  sub: (a, b) => [a[0] - b[0], a[1] - b[1]],
-  add: (a, b) => [a[0] + b[0], a[1] + b[1]],
-  mul: (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]],
-  div: (a, b) => { const d = b[0] * b[0] + b[1] * b[1]; return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; },
-};
-const lerp = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
+/** Search box: finds places in both languages and flies there. */
+function bindPlaceSearch(cm) {
+  const input = $('#mSearch'), box = $('#mResults');
+  let hits = [], sel = 0;
+  const norm = (s) => s.toLocaleLowerCase().replace(/ё/g, 'е');
+  const draw = () => {
+    box.innerHTML = hits.map((p, i) => `<button class="${i === sel ? 'sel' : ''}" data-i="${i}"><span>${esc(L(p.name, p.ru))}</span><small>${p.kind === 'named' ? L('location', 'место') : L('landmark', 'ориентир')}</small></button>`).join('');
+    box.classList.toggle('open', hits.length > 0);
+  };
+  const go = (p) => { input.value = ''; hits = []; draw(); input.blur(); cm.flyToPlace(p); };
+  input.addEventListener('input', () => {
+    const q = norm(input.value.trim());
+    hits = q ? cm.meta.places.filter((p) => norm(p.name).includes(q) || norm(p.ru).includes(q)).slice(0, 8) : [];
+    sel = 0;
+    draw();
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (hits.length) { sel = (sel + (e.key === 'ArrowDown' ? 1 : hits.length - 1)) % hits.length; draw(); } }
+    else if (e.key === 'Enter' && hits[sel]) go(hits[sel]);
+    else if (e.key === 'Escape') { input.value = ''; hits = []; draw(); input.blur(); }
+  });
+  input.addEventListener('blur', () => setTimeout(() => box.classList.remove('open'), 150));
+  input.addEventListener('focus', () => box.classList.toggle('open', hits.length > 0));
+  box.addEventListener('mousedown', (e) => { const b = e.target.closest('button'); if (b) { e.preventDefault(); go(hits[+b.dataset.i]); } });
+}
 
-class MapView {
-  constructor(canvas, hasMap, calib) {
-    this.c = canvas;
-    this.ctx = canvas.getContext('2d');
+class ChestMap {
+  constructor(el, meta, prefs) {
+    const Lf = window.L;
+    this.meta = meta;
+    this.prefs = prefs;
     this.data = { chests: [], others: [] };
-    this.layers = { me: true, squad: true, other: true, heat: false, type: '' };
-    this.zoom = 1; this.ox = 0; this.oy = 0;
-    this.drawn = [];
-    this.img = null;
-    this.ready = new Promise((resolve) => {
-      if (!hasMap) { resolve(); return; }
-      const img = new Image();
-      img.onload = () => { this.img = img; this.c.width = img.naturalWidth * 2; this.c.height = img.naturalHeight * 2; resolve(); };
-      img.onerror = () => resolve();
-      img.src = '/map.png';
-    }).then(() => document.fonts.load('20px "Burbank Big"')).then(() => {
-      this.k = this.img ? 2 : 1; // the canvas is 2x the map image so markers stay sharp
-      const k = calib && calib.w1 ? calib : { w1: { x: 0, y: 0 }, p1: { x: 600, y: 600 }, w2: { x: 100000, y: 0 }, p2: { x: 1150, y: 600 } };
-      const w1 = [k.w1.x, k.w1.y], w2 = [k.w2.x, k.w2.y], p1 = [k.p1.x, k.p1.y], p2 = [k.p2.x, k.p2.y];
-      this.a = C.div(C.sub(p2, p1), C.sub(w2, w1));
-      this.b = C.sub(p1, C.mul(this.a, w1));
+    this.matchFilter = false;
+    const cal = meta.calibration;
+    /** World (Unreal units, X → east, Y → south) → LatLng in the frame. */
+    this.ll = (x, y) => Lf.latLng(cal.scale * y + cal.y0, cal.scale * x + cal.x0);
+    this.fitBounds = Lf.latLngBounds(meta.fit);
+    const frame = Lf.latLngBounds([[0, 0], [meta.frame, meta.frame]]);
+
+    this.renderer = Lf.canvas({ padding: 0.6, tolerance: 4 });
+    const map = this.map = Lf.map(el, {
+      crs: FRAME_CRS, renderer: this.renderer, zoomControl: false, attributionControl: false,
+      minZoom: 0, maxZoom: 6, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90, wheelDebounceTime: 25,
+      maxBounds: frame.pad(0.05), maxBoundsViscosity: 0.85, bounceAtZoomLimits: false, inertiaDeceleration: 2600,
     });
-    this.onResize = () => { this.fit(); this.draw(); };
-    window.addEventListener('resize', this.onResize);
-    this.bind();
-  }
+    map.createPane('heat').style.zIndex = 300;
+    map.createPane('labels').style.zIndex = 350;
+    map.getPane('labels').style.pointerEvents = 'none';
+    map.getPane('heat').style.pointerEvents = 'none';
 
-  dispose() { window.removeEventListener('resize', this.onResize); }
-
-  /** Fit the whole map into the visible part of the window. */
-  fit() {
-    const col = this.c.parentElement.parentElement; // .mapcol
-    const top = col.getBoundingClientRect().top;
-    const maxH = Math.max(420, window.innerHeight - top - 28);
-    const w = Math.min(col.clientWidth - 2, maxH * (this.c.width / this.c.height));
-    this.c.style.width = `${Math.floor(w)}px`;
-  }
-
-  /** Canvas pixels per CSS pixel. */
-  get ratio() { return this.c.width / (this.c.clientWidth || this.c.width); }
-
-  toBase(x, y) { const p = C.add(C.mul(this.a, [x, y]), this.b); return { x: p[0] * this.k, y: p[1] * this.k }; }
-  toScreen(x, y) { const p = this.toBase(x, y); return { x: p.x * this.zoom + this.ox, y: p.y * this.zoom + this.oy }; }
-
-  clampView() {
-    const W = this.c.width, H = this.c.height;
-    this.zoom = Math.min(6, Math.max(1, this.zoom));
-    this.ox = Math.min(0, Math.max(W - W * this.zoom, this.ox));
-    this.oy = Math.min(0, Math.max(H - H * this.zoom, this.oy));
-  }
-
-  zoomAt(factor, cx = this.c.width / 2, cy = this.c.height / 2) {
-    const z = Math.min(6, Math.max(1, this.zoom * factor));
-    const f = z / this.zoom;
-    this.ox = cx - (cx - this.ox) * f;
-    this.oy = cy - (cy - this.oy) * f;
-    this.zoom = z;
-    this.clampView();
-    this.draw();
-  }
-
-  bind() {
-    const c = this.c;
-    const pos = (e) => { const r = c.getBoundingClientRect(); return { x: ((e.clientX - r.left) * c.width) / r.width, y: ((e.clientY - r.top) * c.height) / r.height }; };
-    c.addEventListener('wheel', (e) => { e.preventDefault(); const p = pos(e); this.zoomAt(e.deltaY < 0 ? 1.25 : 0.8, p.x, p.y); }, { passive: false });
-    let drag = null;
-    c.addEventListener('pointerdown', (e) => { drag = { ...pos(e), ox: this.ox, oy: this.oy, moved: false }; c.setPointerCapture(e.pointerId); });
-    c.addEventListener('pointermove', (e) => {
-      const p = pos(e);
-      if (!drag) { this.hover(e, p); return; }
-      const dx = p.x - drag.x, dy = p.y - drag.y;
-      if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 4 * this.ratio) { drag.moved = true; c.classList.add('drag'); hideTip(); }
-      if (drag.moved) { this.ox = drag.ox + dx; this.oy = drag.oy + dy; this.clampView(); this.draw(); }
-    });
-    const end = () => { drag = null; c.classList.remove('drag'); };
-    c.addEventListener('pointerup', end);
-    c.addEventListener('pointercancel', end);
-    c.addEventListener('pointerleave', () => { if (!drag) hideTip(); });
-    c.addEventListener('dblclick', (e) => { const p = pos(e); this.zoomAt(2, p.x, p.y); });
-  }
-
-  hover(e, p) {
-    let best = null, bestD = Infinity;
-    const slack = 3 * this.ratio;
-    for (const d of this.drawn) {
-      const dist = Math.hypot(d.x - p.x, d.y - p.y);
-      if (dist <= d.r + slack && dist < bestD) { best = d; bestD = dist; }
+    this.groups = { others: Lf.featureGroup(), squad: Lf.featureGroup(), me: Lf.featureGroup() };
+    for (const g of Object.values(this.groups)) {
+      g.on('mouseover mousemove', (e) => this.tip(e));
+      g.on('mouseout', hideTip);
+      g.on('click', (e) => { if (map.getZoom() < 4) map.flyTo(e.latlng, Math.min(map.getMaxZoom(), map.getZoom() + 1.5), { duration: 0.5 }); });
     }
-    if (!best) { hideTip(); return; }
-    const ch = best.chest;
-    const all = !$('#mMatch')?.value;
-    if (!ch) {
-      showTip(e, `<b>${L('Chest', 'Сундук')}</b><br>${all ? L('nobody in the squad has opened it yet', 'ещё никто из отряда не открывал') : L('not opened in this match', 'в этом матче не открывали')}`);
-      return;
-    }
-    const lines = [`<b>${esc(TYPES[ch.type]?.one() ?? L('Chest', 'Сундук'))}</b>`];
-    if (ch.me) {
-      const inM = all && ch.matches !== ch.me ? ` (${L('in', 'в')} ${n(ch.matches)} ${pl(ch.matches, 'match', 'matches', 'матче', 'матчах', 'матчах')})` : '';
-      lines.push(`${L(`I opened it ${n(ch.me)} ${timesW(ch.me)}`, `я открыл: ${n(ch.me)} ${timesW(ch.me)}`)}${inM}`);
-    }
-    if (ch.squad) lines.push(`${L('squad', 'отряд')}: ${n(ch.squad)} ${timesW(ch.squad)}`);
-    showTip(e, lines.join('<br>'));
-  }
+    this.places = Lf.layerGroup();
+    this.heat = null;
+    this.tiles = null;
+    this.setStyle();
 
-  draw() {
-    const { ctx, c } = this;
-    if (!this.a) return;
-    const R = this.ratio;
-    const Ly = this.layers;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, c.width, c.height);
-    ctx.setTransform(this.zoom, 0, 0, this.zoom, this.ox, this.oy);
-    if (this.img) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(this.img, 0, 0, c.width, c.height); } else { ctx.fillStyle = '#16233a'; ctx.fillRect(0, 0, c.width, c.height); }
-    const chests = this.data.chests.filter((ch) => !Ly.type || ch.type === Ly.type);
-    if (Ly.heat) ctx.drawImage(this.heat(chests), 0, 0);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = 'rgba(6, 11, 24, .22)'; // calm the map down so markers read better
-    ctx.fillRect(0, 0, c.width, c.height);
-    this.drawn = [];
-    if (Ly.heat) return;
-
-    const zf = 1 + 0.35 * Math.log2(this.zoom);
-    const dot = (q, r, fill, stroke, lw) => {
-      ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2);
-      if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+    map._fitZoom = map.getBoundsZoom(this.fitBounds, false, Lf.point(24, 24));
+    map.setMinZoom(Math.max(0, Math.floor((map._fitZoom - 0.75) * 4) / 4));
+    if (mapLastView) map.setView(mapLastView.center, mapLastView.zoom, { animate: false });
+    else this.fit(false);
+    map.on('moveend', () => { mapLastView = { center: map.getCenter(), zoom: map.getZoom() }; });
+    map.on('movestart zoomstart', hideTip);
+    this.onResize = () => {
+      const z = map.getBoundsZoom(this.fitBounds, false, Lf.point(24, 24));
+      if (Math.abs(z - map._fitZoom) > 0.01) { map._fitZoom = z; map.setMinZoom(Math.max(0, Math.floor((z - 0.75) * 4) / 4)); }
     };
-    if (Ly.other && !Ly.type) {
-      for (const o of this.data.others) {
-        const q = this.toScreen(o.x, o.y), r = 1.9 * R * zf;
-        dot(q, r, 'rgba(205,212,224,.55)', 'rgba(0,0,0,.4)', 0.7 * R);
-        this.drawn.push({ ...q, r, chest: null });
-      }
+    map.on('resize', this.onResize);
+  }
+
+  dispose() {
+    hideTip();
+    this.map.remove();
+  }
+
+  fit(animate) {
+    this.map.fitBounds(this.fitBounds, { padding: [12, 12], animate });
+  }
+
+  /**
+   * Map picture: a tile layer at the picture's own resolution over all of it, plus (from zoom 4) sharpened tiles over
+   * the island only, so zooming in stays crisp while the open sea costs nothing.
+   */
+  setStyle() {
+    const Lf = window.L, map = this.map;
+    const st = this.meta.styles.find((s) => s.id === this.prefs.style) ?? this.meta.styles[0];
+    const url = `/maptiles/${st.id}/{z}/{x}_{y}.webp?v=${this.meta.version}`;
+    const opt = { tileSize: this.meta.tileSize, maxZoom: 6, noWrap: true, keepBuffer: 3, className: 'maptile' };
+    const layers = [Lf.tileLayer(url, { ...opt, minZoom: 0, maxNativeZoom: st.maxNativeZoom, bounds: Lf.latLngBounds(st.bounds) })];
+    if (st.detail) {
+      layers.push(Lf.tileLayer(url, { ...opt, minZoom: st.detail.minZoom, minNativeZoom: st.detail.minZoom, maxNativeZoom: st.detail.maxNativeZoom, bounds: Lf.latLngBounds(st.detail.bounds) }));
     }
-    if (Ly.squad) {
-      for (const ch of chests) {
-        if (ch.me > 0 || ch.squad === 0) continue;
-        const q = this.toScreen(ch.x, ch.y), r = 3.6 * R * zf;
-        dot(q, r, 'rgba(0,0,0,.35)', SQUAD, 1.8 * R);
-        this.drawn.push({ ...q, r, chest: ch });
-      }
-    }
-    if (Ly.me) {
-      const mine = chests.filter((ch) => ch.me > 0).sort((a, b) => a.me - b.me); // the most looted on top
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (const ch of mine) {
-        const k = lootClass(ch.me);
-        const q = this.toScreen(ch.x, ch.y), r = k.r * R * zf;
-        dot(q, r, k.color, 'rgba(10,12,18,.85)', 1.3 * R);
-        if (ch.me > 1) {
-          ctx.fillStyle = k.ink;
-          ctx.font = `${Math.round(r * (ch.me >= 10 ? 1.2 : 1.45))}px "Burbank Big", Arial, sans-serif`;
-          ctx.fillText(String(ch.me), q.x, q.y + 0.6 * R);
-        }
-        this.drawn.push({ ...q, r, chest: ch });
-      }
+    const old = this.tiles ?? [];
+    this.tiles = layers;
+    layers.forEach((t) => t.addTo(map));
+    map.getContainer().style.background = st.bg;
+    if (old.length) {
+      // The new picture fades in over the old one; then the old one goes.
+      const drop = () => old.forEach((t) => map.hasLayer(t) && map.removeLayer(t));
+      layers[0].once('load', () => setTimeout(drop, 250));
+      setTimeout(drop, 3000);
     }
   }
 
-  /** Heat map in base (unzoomed) canvas coordinates, weighted by how often the chest was opened. */
-  heat(chests) {
-    const { c, layers: Ly } = this;
-    const off = document.createElement('canvas');
-    off.width = c.width; off.height = c.height;
-    const o = off.getContext('2d');
-    const r = 26 * (c.width / 1200);
-    o.globalCompositeOperation = 'lighter';
-    for (const ch of chests) {
-      const w = (Ly.me ? ch.me : 0) + (Ly.squad ? ch.squad : 0);
-      if (!w) continue;
-      const q = this.toBase(ch.x, ch.y);
-      const g = o.createRadialGradient(q.x, q.y, 0, q.x, q.y, r);
-      g.addColorStop(0, `rgba(0,0,0,${Math.min(1, 0.12 * w)})`); g.addColorStop(1, 'rgba(0,0,0,0)');
-      o.fillStyle = g; o.fillRect(q.x - r, q.y - r, 2 * r, 2 * r);
+  /**
+   * Rebuilds the chest markers (draw order: others, squad, mine with the most opened on top), or the heat map, which
+   * takes their place while it is on.
+   */
+  drawChests() {
+    const P = this.prefs, map = this.map;
+    for (const g of Object.values(this.groups)) { g.clearLayers(); map.removeLayer(g); }
+    const chests = this.data.chests.filter((c) => P.types[c.type] !== false);
+    this.drawHeat(chests);
+    if (P.heat) return;
+    if (P.others) {
+      for (const o of this.data.others) {
+        this.groups.others.addLayer(new ChestDot(this.ll(o.x, o.y), { base: 2.2, fillColor: '#e3e8f2', fillOpacity: 0.75, color: '#0a0f1c', opacity: 0.55, weight: 1, chest: null }));
+      }
+      this.groups.others.addTo(map);
     }
-    const data = o.getImageData(0, 0, off.width, off.height);
-    const d = data.data;
+    if (P.squad) {
+      for (const c of chests) {
+        if (c.me > 0 || c.squad === 0) continue;
+        this.groups.squad.addLayer(new ChestDot(this.ll(c.x, c.y), { base: 3.8, fillColor: '#06101f', fillOpacity: 0.45, color: SQUAD, opacity: 1, weight: 2, chest: c }));
+      }
+      this.groups.squad.addTo(map);
+    }
+    if (P.me) {
+      for (const c of chests.filter((x) => x.me > 0).sort((a, b) => a.me - b.me)) {
+        const k = lootClass(c.me);
+        this.groups.me.addLayer(new ChestDot(this.ll(c.x, c.y), {
+          base: k.r, fillColor: k.color, fillOpacity: 1, color: '#0a0c12', opacity: 0.9, weight: 1.4,
+          label: c.me > 1 ? String(c.me) : '', ink: k.ink, chest: c,
+        }));
+      }
+      this.groups.me.addTo(map);
+    }
+  }
+
+  /** Heat map over the island, weighted by how often a chest was opened (mine, plus the squad's when that is on). */
+  drawHeat(chests) {
+    const Lf = window.L, P = this.prefs;
+    if (this.heat) { this.map.removeLayer(this.heat); this.heat = null; }
+    if (!P.heat) return;
+    // Over the island only, one canvas pixel per frame pixel. Latitude is the frame's y, growing downwards,
+    // so the island's top edge is its "south".
+    const b = this.fitBounds, x0 = b.getWest(), top = b.getSouth();
+    const w = Math.ceil(b.getEast() - x0), h = Math.ceil(b.getNorth() - top);
+    const off = document.createElement('canvas');
+    off.width = w; off.height = h;
+    const o = off.getContext('2d');
+    const r = 30;
+    o.globalCompositeOperation = 'lighter';
+    for (const c of chests) {
+      const wgt = c.me + (P.squad ? c.squad : 0);
+      if (!wgt) continue;
+      const q = this.ll(c.x, c.y);
+      const px = q.lng - x0, py = q.lat - top;
+      const g = o.createRadialGradient(px, py, 0, px, py, r);
+      g.addColorStop(0, `rgba(0,0,0,${Math.min(1, 0.12 * wgt)})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      o.fillStyle = g;
+      o.fillRect(px - r, py - r, 2 * r, 2 * r);
+    }
+    const img = o.getImageData(0, 0, w, h);
+    const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
       const a = d[i + 3] / 255;
       if (a <= 0) continue;
@@ -893,8 +1009,48 @@ class MapView {
       const col = k < 0.5 ? lerp([108, 188, 255], [246, 210, 74], k * 2) : lerp([246, 210, 74], [210, 70, 62], (k - 0.5) * 2);
       d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = Math.min(220, 60 + a * 400);
     }
-    o.putImageData(data, 0, 0);
-    return off;
+    o.putImageData(img, 0, 0);
+    this.heat = Lf.imageOverlay(off.toDataURL(), Lf.latLngBounds([[top, x0], [top + h, x0 + w]]), { pane: 'heat', interactive: false, className: 'heatlayer' }).addTo(this.map);
+  }
+
+  /** Place names on the map, like the game's map labels. */
+  drawPlaces() {
+    const Lf = window.L, P = this.prefs;
+    this.places.clearLayers();
+    this.map.removeLayer(this.places);
+    if (!P.places) return;
+    for (const p of this.meta.places) {
+      if (p.kind === 'named' ? !P.named : !P.landmarks) continue;
+      this.places.addLayer(Lf.marker(this.ll(p.x, p.y), {
+        pane: 'labels', interactive: false, keyboard: false,
+        icon: Lf.divIcon({ className: `place ${p.kind}`, html: `<span>${esc(L(p.name, p.ru))}</span>`, iconSize: [0, 0] }),
+      }));
+    }
+    this.places.addTo(this.map);
+  }
+
+  flyToPlace(p) {
+    const Lf = window.L, at = this.ll(p.x, p.y);
+    this.map.flyTo(at, Math.max(this.map.getZoom(), 4.25), { duration: 0.8 });
+    const ping = Lf.marker(at, { interactive: false, keyboard: false, icon: Lf.divIcon({ className: 'mping', html: `<i></i><span>${esc(L(p.name, p.ru))}</span>`, iconSize: [0, 0] }) }).addTo(this.map);
+    setTimeout(() => this.map.removeLayer(ping), 3200);
+  }
+
+  tip(e) {
+    const ch = (e.propagatedFrom ?? e.layer ?? e.sourceTarget)?.options?.chest;
+    const ev = e.originalEvent;
+    if (!ev) return;
+    if (!ch) {
+      showTip(ev, `<b>${L('Chest', 'Сундук')}</b><br>${this.matchFilter ? L('not opened in this match', 'в этом матче не открывали') : L('nobody in the squad has opened it yet', 'ещё никто из отряда не открывал')}`);
+      return;
+    }
+    const lines = [`<b>${esc(TYPES[ch.type]?.one() ?? L('Chest', 'Сундук'))}</b>`];
+    if (ch.me) {
+      const inM = !this.matchFilter && ch.matches !== ch.me ? ` (${L('in', 'в')} ${n(ch.matches)} ${pl(ch.matches, 'match', 'matches', 'матче', 'матчах', 'матчах')})` : '';
+      lines.push(`${L(`I opened it ${n(ch.me)} ${timesW(ch.me)}`, `я открыл: ${n(ch.me)} ${timesW(ch.me)}`)}${inM}`);
+    }
+    if (ch.squad) lines.push(`${L('squad', 'отряд')}: ${n(ch.squad)} ${timesW(ch.squad)}`);
+    showTip(ev, lines.join('<br>'));
   }
 }
 

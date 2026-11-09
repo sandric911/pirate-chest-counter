@@ -1,0 +1,232 @@
+{
+ "version": "aebdf9fd17",
+ "frame": 2048,
+ "tileSize": 256,
+ "frameZoom": 3,
+ "calibration": {
+  "scale": 0.00683903819322586,
+  "x0": 964.6928823900438,
+  "y0": 1022.7334939150721
+ },
+ "fit": [
+  [
+   512.0,
+   514.0
+  ],
+  [
+   1720.0,
+   1688.0
+  ]
+ ],
+ "styles": [
+  {
+   "id": "official",
+   "name": "Official map",
+   "ru": "Официальная",
+   "maxNativeZoom": 3,
+   "bounds": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     2048.0,
+     2048.0
+    ]
+   ],
+   "bg": "#0e5297",
+   "detail": {
+    "minZoom": 4,
+    "maxNativeZoom": 5,
+    "bounds": [
+     [
+      512.0,
+      514.0
+     ],
+     [
+      1720.0,
+      1688.0
+     ]
+    ]
+   }
+  },
+  {
+   "id": "game",
+   "name": "In-game",
+   "ru": "Как в игре",
+   "maxNativeZoom": 3,
+   "bounds": [
+    [
+     512.0,
+     514.0
+    ],
+    [
+     1720.0,
+     1688.0
+    ]
+   ],
+   "bg": "#275166",
+   "detail": {
+    "minZoom": 4,
+    "maxNativeZoom": 5,
+    "bounds": [
+     [
+      512,
+      514
+     ],
+     [
+      1720,
+      1688
+     ]
+    ]
+   }
+  }
+ ],
+ "places": [
+  {
+   "id": "rubber-resort",
+   "kind": "named",
+   "name": "Rubber Resort",
+   "ru": "Резиновый резорт",
+   "x": -23982,
+   "y": -46582
+  },
+  {
+   "id": "the-chest",
+   "kind": "named",
+   "name": "The Chest",
+   "ru": "Сундук",
+   "x": -32345,
+   "y": -22764
+  },
+  {
+   "id": "loot-lagoon",
+   "kind": "named",
+   "name": "Loot Lagoon",
+   "ru": "Лагуна ларцов",
+   "x": 14200,
+   "y": -23673
+  },
+  {
+   "id": "fortunes-fort",
+   "kind": "named",
+   "name": "Fortune's Fort",
+   "ru": "Форт фортуны",
+   "x": 47836,
+   "y": -28764
+  },
+  {
+   "id": "lantern-landing",
+   "kind": "named",
+   "name": "Lantern Landing",
+   "ru": "Пристань фонарей",
+   "x": -11982,
+   "y": 3782
+  },
+  {
+   "id": "arlong-park",
+   "kind": "named",
+   "name": "Arlong Park",
+   "ru": "Арлонг-парк",
+   "x": -51618,
+   "y": 14873
+  },
+  {
+   "id": "cursed-cavern",
+   "kind": "named",
+   "name": "Cursed Cavern",
+   "ru": "Пещера проклятий",
+   "x": 31291,
+   "y": 18327
+  },
+  {
+   "id": "ss-rocky",
+   "kind": "named",
+   "name": "The $.$. Rocky",
+   "ru": "Яхта A$AP Rocky",
+   "x": 66382,
+   "y": 28873
+  },
+  {
+   "id": "loguetown",
+   "kind": "named",
+   "name": "Loguetown",
+   "ru": "Логтаун",
+   "x": 1836,
+   "y": 53782
+  },
+  {
+   "id": "windmill-village",
+   "kind": "named",
+   "name": "Windmill Village",
+   "ru": "Деревня Фууся",
+   "x": -33436,
+   "y": 62145
+  },
+  {
+   "id": "busy-bay",
+   "kind": "named",
+   "name": "Busy Bay",
+   "ru": "Бухта бывалых",
+   "x": 62382,
+   "y": 68691
+  },
+  {
+   "id": "plunder-port",
+   "kind": "named",
+   "name": "Plunder Port",
+   "ru": "Пристань пиратов",
+   "x": 26200,
+   "y": 87600
+  },
+  {
+   "id": "ne-islet",
+   "kind": "landmark",
+   "name": "Northeast Islet",
+   "ru": "Островок на северо-востоке",
+   "x": 89655,
+   "y": -58400
+  },
+  {
+   "id": "partybarge",
+   "kind": "landmark",
+   "name": "Boogie Boat",
+   "ru": "Лодка люкс",
+   "x": 71040,
+   "y": -4224
+  },
+  {
+   "id": "landmark-05",
+   "kind": "landmark",
+   "name": "Baratie",
+   "ru": "Baratie",
+   "x": 65771,
+   "y": 69662
+  },
+  {
+   "id": "landmark-03",
+   "kind": "landmark",
+   "name": "Henry",
+   "ru": "Генри",
+   "x": 34307,
+   "y": 73225
+  },
+  {
+   "id": "landmark-01",
+   "kind": "landmark",
+   "name": "Giant's Battlefield",
+   "ru": "Поле боя великанов",
+   "x": -3614,
+   "y": 34262
+  },
+  {
+   "id": "landmark-04",
+   "kind": "landmark",
+   "name": "The Salty Skull",
+   "ru": "Солёный череп",
+   "x": 34752,
+   "y": 31434
+  }
+ ],
+ "credit": "Fortnite © Epic Games"
+}

@@ -20,8 +20,22 @@
 | `timer.webp` | значок таймера | [Fortnite Wiki](https://fortnite.fandom.com/wiki/File:Timer_-_Icon_-_Fortnite.png) |
 
 Значок программы (`app.ico`, `wwwroot/icon.png`) и картинка сундука в оверлее (`overlay-chest.png`) собраны из
-`chest.png` скриптом `tools/icon/build_icon.ps1`. Подложка карты (`assets/map.png`) — скриншот внутриигровой карты
-(Fortnite © Epic Games). Мелкие значки «обновить», «внимание», «метка» нарисованы заново.
+`chest.png` скриптом `tools/icon/build_icon.ps1`. Мелкие значки «обновить», «внимание», «метка», «поиск», «плюс»,
+«минус», «весь остров» нарисованы заново.
+
+## Карта (`assets/maptiles/`, `assets/map.png`)
+
+| Что | Источник |
+|---|---|
+| вид «Официальная» | официальная карта сезона 2048×2048, [fortnite-api.com/images/map.png](https://fortnite-api.com/images/map.png) (то же, что [Crossbones Isle (Update v43.00) на Fortnite Wiki](https://fortnite.fandom.com/wiki/File:Crossbones_Isle_(Update_v43.00)_-_Island_-_Fortnite.webp)) |
+| вид «Как в игре», `assets/map.png` | скриншот внутриигровой карты автора |
+| ориентиры и их русские названия | [fortnite-api.com/v1/map](https://fortnite-api.com/v1/map) |
+
+Всё это — Fortnite © Epic Games. Тайлы нарезает `tools/assets/build_map_tiles.py`.
+
+## Библиотеки в интерфейсе
+
+[Leaflet](https://leafletjs.com) 1.9.4 (`wwwroot/lib/leaflet/`) — BSD 2-Clause, текст лицензии рядом в `LICENSE`.
 
 ## Шрифты (`src/PirateChest.App/wwwroot/fonts/`)
 
