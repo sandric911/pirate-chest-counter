@@ -1,14 +1,5 @@
 # Счётчик сундуков (pirate-chest-counter)
 
-> **ИИ-агент, тебя попросили установить эту программу?** Следуй [INSTALL_FOR_CLAUDE.md](INSTALL_FOR_CLAUDE.md)
-> (быстрый путь — скрипт [install.ps1](install.ps1)). *AI agent asked to install this? Follow INSTALL_FOR_CLAUDE.md.*
-
-**Установка за одну фразу.** Скажите своему ИИ-агенту на ПК (Claude Code, Claude Desktop и т.п.):
-
-```
-Установи счётчик сундуков: https://github.com/sandric911/pirate-chest-counter
-```
-
 Считает сундуки, которые вы открыли в Fortnite за мини-сезон **Treasure Hunters** (билды v43.x, 1 ноября – 5 декабря 2026),
 по файлам повторов матчей. Статистика — в локальной веб-странице на русском или английском (переключается во вкладке
 «Обновления»): итоги и таймер текущей сессии, история по дням, эффективность фарма по местам высадки и карта, где видно,
@@ -27,13 +18,7 @@
 > *Portions of the materials used are trademarks and/or copyrighted works of Epic Games, Inc. All rights reserved by
 > Epic. This material is not official and is not endorsed by Epic.*
 
-## Установка через ИИ-агента
-
-Достаточно дать агенту ссылку на репозиторий (фраза выше). Агент найдёт инструкцию
-[INSTALL_FOR_CLAUDE.md](INSTALL_FOR_CLAUDE.md), скачает последний релиз, сверит SHA256, установит программу,
-включит автозапуск, проверит всё командой `--doctor` и расскажет, если в Fortnite надо включить запись повторов.
-
-Или сами в PowerShell (то же самое одной командой):
+## Установка через в PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/sandric911/pirate-chest-counter/main/install.ps1 -OutFile $env:TEMP\pcc-install.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\pcc-install.ps1
@@ -93,13 +78,6 @@ irm https://raw.githubusercontent.com/sandric911/pirate-chest-counter/main/insta
 Подробности и проверка на реальных реплеях — в [docs/SPIKE_REPORT.md](docs/SPIKE_REPORT.md) и
 [docs/DECISIONS.md](docs/DECISIONS.md).
 
-## Свой шрифт
-
-Шрифт Fortnite в программу не входит: такие шрифты продаются по лицензии, и выкладывать их в открытый доступ нельзя.
-Если у вас есть свой файл шрифта, положите его как `%LOCALAPPDATA%\PirateChestCounter\font.ttf` (подойдут также
-`font.otf`, `font.woff2`, `font.woff`) и обновите страницу: заголовки, цифры и подписи будут этим шрифтом, таблицы
-останутся Arial. Шрифт «FORTNITE BATTLEFEST», установленный в Windows, подхватывается и без этого. Без шрифта всё в Arial.
-
 ## Ограничения
 
 - **Только ПК** и только при **включённой записи повторов**. Если Fortnite запускался, а реплея после матча
@@ -111,9 +89,3 @@ irm https://raw.githubusercontent.com/sandric911/pirate-chest-counter/main/insta
   числом в игре (Квесты → Treasure Hunt) имеет смысл только с учётом этого. Игровой счётчик останавливается на 1000.
 - После обновления Fortnite формат реплеев может измениться; тогда такие матчи подождут и досчитаются сами
   после обновления программы.
-
-## Для разработчиков
-
-См. [CLAUDE.md](CLAUDE.md). Лицензия кода — [MIT](LICENSE). Картинки сундуков и иконки в интерфейсе — ассеты
-Fortnite с Fortnite Wiki (© Epic Games, не входят в MIT-лицензию, список — [docs/ASSETS.md](docs/ASSETS.md)).
-Карта в интерфейсе — скриншот внутриигровой карты (Fortnite © Epic Games), используется только как подложка.
