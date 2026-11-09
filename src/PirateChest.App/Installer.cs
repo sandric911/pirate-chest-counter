@@ -20,9 +20,12 @@ public static class Installer
     {
         var w = new StringWriter();
         var code = Install(w);
+        var ru = Lang.IsRussianWindows;
         MessageBox.Show(code == 0
-                ? "Pirate Chest Counter is installed and running.\n\nIts chest icon is in the tray next to the clock; double-click it to open the window. The program starts with Windows.\n\nOnly finished matches are counted: turn on replay recording in Fortnite (Settings → Game → Replays → Record Replays)."
-                : "Installation failed:\n\n" + w,
+                ? ru
+                    ? "Счётчик сундуков установлен и запущен.\n\nЗначок сундука — в трее рядом с часами, двойной щелчок открывает окно. Программа запускается вместе с Windows.\n\nСчитаются только законченные матчи: включите в Fortnite запись повторов (Настройки → Игра → Повторы → Запись повторов)."
+                    : "Pirate Chest Counter is installed and running.\n\nIts chest icon is in the tray next to the clock; double-click it to open the window. The program starts with Windows.\n\nOnly finished matches are counted: turn on replay recording in Fortnite (Settings → Game → Replays → Record Replays)."
+                : (ru ? "Установка не удалась:\n\n" : "Installation failed:\n\n") + w,
             AppInfo.DisplayName, MessageBoxButtons.OK, code == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Error);
         return code;
     }

@@ -1,5 +1,40 @@
 'use strict';
 
+// ---------------------------------------------------------------- language (English / Russian)
+
+let LANG = 'en';
+/** The same text in both languages: L('History', 'История'). */
+const L = (en, ru) => (LANG === 'ru' ? ru : en);
+/** Plural: pl(k, 'match', 'matches', 'матч', 'матча', 'матчей'). */
+function pl(k, enOne, enMany, ruOne, ruFew, ruMany) {
+  if (LANG !== 'ru') return k === 1 ? enOne : enMany;
+  const m10 = k % 10, m100 = k % 100;
+  if (m10 === 1 && m100 !== 11) return ruOne;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return ruFew;
+  return ruMany;
+}
+const matchesW = (k) => pl(k, 'match', 'matches', 'матч', 'матча', 'матчей');
+const timesW = (k) => pl(k, 'time', 'times', 'раз', 'раза', 'раз');
+const locale = () => (LANG === 'ru' ? 'ru-RU' : 'en-GB');
+const numLocale = () => (LANG === 'ru' ? 'ru-RU' : 'en-US');
+
+const TABS = {
+  '': ['Home', 'Главная'],
+  history: ['History', 'История'],
+  efficiency: ['Efficiency', 'Эффективность'],
+  map: ['Map', 'Карта'],
+  overlay: ['Overlay', 'Оверлей'],
+  settings: ['Settings', 'Настройки'],
+};
+function applyLang() {
+  document.documentElement.lang = LANG;
+  document.title = L('Pirate Chest Counter', 'Счётчик сундуков');
+  document.querySelectorAll('#tabs a').forEach((a) => { a.textContent = L(...TABS[a.dataset.tab]); });
+  const t = { min: L('Minimize', 'Свернуть'), close: L('Close to tray', 'Закрыть в трей') };
+  document.querySelectorAll('.wb').forEach((b) => { if (t[b.dataset.w]) b.title = t[b.dataset.w]; });
+  setMaxTitle();
+}
+
 // ---------------------------------------------------------------- host window (WebView2)
 
 const host = window.chrome?.webview;
@@ -24,28 +59,28 @@ function dragArea(el, skip) {
 dragArea(document.getElementById('titlebar'), '.wb');
 dragArea(document.getElementById('side'), 'a');
 document.querySelectorAll('.wb').forEach((b) => b.addEventListener('click', () => send(b.dataset.w)));
+let maximized = false;
+function setMaxTitle() {
+  const b = document.querySelector('.wb[data-w="max"]');
+  b.title = maximized ? L('Restore', 'Восстановить') : L('Maximize', 'Развернуть');
+  b.querySelector('use').setAttribute('href', maximized ? '#w-restore' : '#w-max');
+}
 host?.addEventListener('message', (e) => {
   if (typeof e.data !== 'string' || !e.data.startsWith('state:')) return;
-  const max = e.data === 'state:max';
-  const b = document.querySelector('.wb[data-w="max"]');
-  b.title = max ? 'Restore' : 'Maximize';
-  b.querySelector('use').setAttribute('href', max ? '#w-restore' : '#w-max');
+  maximized = e.data === 'state:max';
+  setMaxTitle();
 });
 
 // ---------------------------------------------------------------- helpers
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const NF = new Intl.NumberFormat('en-US');
-const n = (v) => NF.format(v ?? 0);
-const n1 = (v) => (v == null ? '—' : new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(v));
+const n = (v) => new Intl.NumberFormat(numLocale()).format(v ?? 0);
+const n1 = (v) => (v == null ? '—' : new Intl.NumberFormat(numLocale(), { maximumFractionDigits: 2 }).format(v));
 const icon = (name, cls = '') => `<svg class="ico ${cls}"><use href="#i-${name}"/></svg>`;
 /** Fortnite icon from img/ (white silhouette, tinted with the text colour). */
 const wi = (name, cls = '') => `<span class="wi ${cls}" style="--src:url(/img/${name}.webp)"></span>`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const plural = (k, one, many) => (k === 1 ? one : many);
-const matchesW = (k) => plural(k, 'match', 'matches');
-const timesW = (k) => plural(k, 'time', 'times');
 const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 async function api(path) {
@@ -66,15 +101,15 @@ async function post(path, body) {
 
 function dt(iso, withYear = false) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', ...(withYear ? { year: 'numeric' } : {}), hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleString(locale(), { day: '2-digit', month: 'short', ...(withYear ? { year: 'numeric' } : {}), hour: '2-digit', minute: '2-digit' });
 }
 function ago(iso) {
   if (!iso) return '';
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (s < 90) return 'just now';
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  if (s < 86400 * 2) return `${Math.round(s / 3600)} h ago`;
-  return `${Math.round(s / 86400)} days ago`;
+  if (s < 90) return L('just now', 'только что');
+  if (s < 3600) return L(`${Math.round(s / 60)} min ago`, `${Math.round(s / 60)} мин назад`);
+  if (s < 86400 * 2) return L(`${Math.round(s / 3600)} h ago`, `${Math.round(s / 3600)} ч назад`);
+  return L(`${Math.round(s / 86400)} days ago`, `${Math.round(s / 86400)} дн. назад`);
 }
 /** 1:05:09 */
 function clock(ms) {
@@ -92,6 +127,20 @@ function showTip(e, html) {
 }
 function hideTip() { tip.style.display = 'none'; }
 
+/**
+ * Where the top of the digits sits inside a line box of height 1em (Burbank Big Condensed Black). The green "+N"
+ * is smaller than the number it follows, so it is moved down by the difference to line up with the digits' top.
+ */
+function measureDigitTop() {
+  try {
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = '100px "Burbank Big"';
+    const m = c.measureText('0123456789');
+    const a = m.fontBoundingBoxAscent / 100, d = m.fontBoundingBoxDescent / 100, cap = m.actualBoundingBoxAscent / 100;
+    if (Number.isFinite(a) && Number.isFinite(cap)) document.documentElement.style.setProperty('--digtop', String((1 - (a + d)) / 2 + a - cap));
+  } catch { /* keep the CSS default */ }
+}
+
 // ---------------------------------------------------------------- odometer (rolls like a mechanical counter)
 
 class Odo {
@@ -104,10 +153,11 @@ class Odo {
 
   build(digits) {
     this.digits = digits;
+    const sep = LANG === 'ru' ? ' ' : ',';
     const parts = [];
     for (let pos = digits - 1; pos >= 0; pos--) {
       parts.push(`<span class="c" data-p="${pos}"><span class="strip">${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((d) => `<span>${d}</span>`).join('')}</span></span>`);
-      if (pos > 0 && pos % 3 === 0) parts.push(`<span class="sep" data-s="${pos}">,</span>`);
+      if (pos > 0 && pos % 3 === 0) parts.push(`<span class="sep" data-s="${pos}">${sep}</span>`);
     }
     this.el.innerHTML = parts.join('');
     this.cols = [...this.el.querySelectorAll('.c')].map((c) => ({ pos: +c.dataset.p, el: c, strip: c.firstElementChild }));
@@ -171,7 +221,7 @@ const sortState = {};
 const tables = {};
 
 /** cols: [{ label, value(row) for sorting, html(row) for the cell, num, cls }]; rowCls(row) adds a class to the row. */
-function tableHtml(id, cols, rows, { empty = 'No data', sort = null, rowCls = null } = {}) {
+function tableHtml(id, cols, rows, { empty = L('No data', 'Нет данных'), sort = null, rowCls = null } = {}) {
   if (!sortState[id] && sort) sortState[id] = sort;
   tables[id] = { cols, rows, empty, rowCls };
   return `<div class="boardwrap"><table class="board" id="${id}"><thead><tr>${headHtml(id)}</tr></thead><tbody>${bodyHtml(id)}</tbody></table></div>`;
@@ -194,7 +244,7 @@ function bodyHtml(id) {
       if (x == null && y == null) return 0;
       if (x == null) return 1;
       if (y == null) return -1;
-      return (typeof x === 'string' ? x.localeCompare(y, 'en') : x - y) * k;
+      return (typeof x === 'string' ? x.localeCompare(y, LANG) : x - y) * k;
     });
   }
   return list.map((r) => `<tr class="${rowCls ? rowCls(r) : ''}">${cols.map((c) => `<td class="${c.num ? 'n ' : ''}${c.cls ?? ''}">${c.html(r)}</td>`).join('')}</tr>`).join('');
@@ -275,7 +325,7 @@ async function route() {
     if (seq !== routeSeq) return;
     stagger();
   } catch (e) {
-    view.innerHTML = page(`<div class="banner">${icon('warn')}<div>Could not load data: ${esc(e.message)}</div></div>`);
+    view.innerHTML = page(`<div class="banner">${icon('warn')}<div>${L('Could not load data: ', 'Не удалось загрузить данные: ')}${esc(e.message)}</div></div>`);
   }
   view.scrollTop = 0;
   view.classList.remove('leaving');
@@ -283,32 +333,33 @@ async function route() {
 window.addEventListener('hashchange', route);
 
 function warnBanner(text) {
-  return text ? `<div class="banner">${icon('warn')}<div><b>${esc(text)}</b><br>How to turn on replay recording: see <a href="#/settings">Settings</a>.</div></div>` : '';
+  return text ? `<div class="banner">${icon('warn')}<div><b>${esc(text)}</b><br>${L('How to turn on replay recording: see <a href="#/settings">Settings</a>.', 'Как включить запись повторов — в разделе <a href="#/settings">«Настройки»</a>.')}</div></div>` : '';
 }
 function progressBanner(p) {
   if (!p.busy) return '';
   const pct = p.total ? Math.round((100 * p.done) / p.total) : 5;
-  return `<div class="banner info">${icon('refresh')}<div style="flex:1"><b>Counting matches: ${n(p.done)} of ${n(p.total || p.pending)}</b>
+  return `<div class="banner info">${icon('refresh')}<div style="flex:1"><b>${L(`Counting matches: ${n(p.done)} of ${n(p.total || p.pending)}`, `Считаю матчи: ${n(p.done)} из ${n(p.total || p.pending)}`)}</b>
     <div class="progress"><div style="width:${pct}%"></div></div></div></div>`;
 }
 
 // ---------------------------------------------------------------- home
 
 const TYPES = {
-  Normal: { img: '/img/chest.webp', name: 'Normal', one: 'Normal chest' },
-  Rare: { img: '/img/chest-rare.webp', name: 'Rare', one: 'Rare chest' },
-  Sprite: { img: '/img/chest-sprite.webp', name: 'Sprite', one: 'Sprite chest' },
+  Normal: { img: '/img/chest.png', name: () => L('Normal', 'Обычные'), one: () => L('Normal chest', 'Обычный сундук') },
+  Rare: { img: '/img/chest-rare.png', name: () => L('Rare', 'Редкие'), one: () => L('Rare chest', 'Редкий сундук') },
+  Sprite: { img: '/img/chest-sprite.png', name: () => L('Sprite', 'Спрайтовые'), one: () => L('Sprite chest', 'Спрайтовый сундук') },
 };
 
 /** Session clock state; the browser clock may differ from the PC clock the server uses. */
 let session = null;
 
 function sessionNote(s, now) {
-  if (!s.active) return 'starts with your first match';
-  if (s.playing) return '<span class="live"></span>match in progress';
+  if (!s.active) return L('starts with your first match', 'начнётся с первым матчем');
+  if (s.playing) return `<span class="live"></span>${L('match in progress', 'идёт матч')}`;
   if (!s.lastEndUtc) return '';
   const pause = Math.max(0, Math.floor((now - new Date(s.lastEndUtc).getTime()) / 60000));
-  return `break ${pause} min, resets in ${Math.max(0, s.gapMin - pause)} min`;
+  const left = Math.max(0, s.gapMin - pause);
+  return L(`break ${pause} min, resets in ${left} min`, `перерыв ${pause} мин, сброс через ${left} мин`);
 }
 
 function tickSession() {
@@ -332,42 +383,43 @@ async function renderHome() {
     <div class="tile typetile">
       <img class="pic" src="${TYPES[x.type]?.img ?? TYPES.Normal.img}" alt="">
       <div class="count">${odoHtml(`t${x.type}`)}<span class="delta" data-delta="t${x.type}"></span></div>
-      <div class="name">${esc(TYPES[x.type]?.name ?? x.type)}</div><div class="sub" data-sub="t${x.type}"></div>
+      <div class="name">${esc(TYPES[x.type]?.name() ?? x.type)}</div><div class="sub" data-sub="t${x.type}"></div>
     </div>`).join('');
+  const mine = L('mine', 'мои'), squad = L('squad', 'отряд');
   view.innerHTML = page(`
     <div id="banners"></div>
     <div class="grid g2">
       <div class="tile hero">
-        <img class="pic" src="/img/chest.webp" alt="">
+        <img class="pic" src="/img/chest.png" alt="">
         <div class="value">${odoHtml('mine')}<span class="delta" data-delta="mine"></span></div>
-        <div class="name">My chests</div><div class="sub" id="heroSub"></div>
+        <div class="name">${L('My chests', 'Мои сундуки')}</div><div class="sub" id="heroSub"></div>
       </div>
       <div class="tile hero">
         ${wi('squads', 'pic')}
         <div class="value">${odoHtml('squad')}<span class="delta" data-delta="squad"></span></div>
-        <div class="name">Me + squad</div><div class="sub">with teammates, at least</div>
+        <div class="name">${L('Me + squad', 'Мои + отряд')}</div><div class="sub">${L('with teammates, at least', 'вместе с тиммейтами, не меньше')}</div>
       </div>
     </div>
     <div class="grid g3 section">
-      <div class="panel"><h3>Current session</h3>
+      <div class="panel"><h3>${L('Current session', 'Текущая сессия')}</h3>
         <div class="clock">${wi('timer')}<span id="sessClock">—</span></div>
         <div class="clocknote" id="sessNote"></div>
         <div class="stats small">
-          <div class="stat"><div class="v gold">${odoHtml('sMine')}<span class="delta" data-delta="sMine"></span></div><div class="k">mine</div></div>
-          <div class="stat"><div class="v sea">${odoHtml('sSquad')}<span class="delta" data-delta="sSquad"></span></div><div class="k">squad</div></div>
-          <div class="stat"><div class="v">${odoHtml('sMatches')}<span class="delta" data-delta="sMatches"></span></div><div class="k" id="sMatchesK">matches</div></div></div></div>
-      <div class="panel"><h3>Today</h3><div class="stats">
-        <div class="stat"><div class="v gold">${odoHtml('dMine')}<span class="delta" data-delta="dMine"></span></div><div class="k">mine</div></div>
-        <div class="stat"><div class="v sea">${odoHtml('dSquad')}<span class="delta" data-delta="dSquad"></span></div><div class="k">squad</div></div>
-        <div class="stat"><div class="v">${odoHtml('dMatches')}<span class="delta" data-delta="dMatches"></span></div><div class="k" id="dMatchesK">matches</div></div></div></div>
-      <div class="panel"><h3>Last match</h3><div id="lastMatch"></div></div>
+          <div class="stat"><div class="v gold">${odoHtml('sMine')}<span class="delta" data-delta="sMine"></span></div><div class="k">${mine}</div></div>
+          <div class="stat"><div class="v sea">${odoHtml('sSquad')}<span class="delta" data-delta="sSquad"></span></div><div class="k">${squad}</div></div>
+          <div class="stat"><div class="v">${odoHtml('sMatches')}<span class="delta" data-delta="sMatches"></span></div><div class="k" id="sMatchesK"></div></div></div></div>
+      <div class="panel"><h3>${L('Today', 'Сегодня')}</h3><div class="stats">
+        <div class="stat"><div class="v gold">${odoHtml('dMine')}<span class="delta" data-delta="dMine"></span></div><div class="k">${mine}</div></div>
+        <div class="stat"><div class="v sea">${odoHtml('dSquad')}<span class="delta" data-delta="dSquad"></span></div><div class="k">${squad}</div></div>
+        <div class="stat"><div class="v">${odoHtml('dMatches')}<span class="delta" data-delta="dMatches"></span></div><div class="k" id="dMatchesK"></div></div></div></div>
+      <div class="panel"><h3>${L('Last match', 'Последний матч')}</h3><div id="lastMatch"></div></div>
     </div>
     <div class="section">
-      <h2>By chest type</h2>
+      <h2>${L('By chest type', 'По типам сундуков')}</h2>
       <div class="grid g3">${typeTiles}</div>
       <div class="ministats">
-        <div class="ministat">${wi('crown')}<div><div class="v" id="best"></div><div class="k">best match</div></div></div>
-        <div class="ministat">${wi('chest-icon')}<div><div class="v" id="perMatch"></div><div class="k">average per match</div></div></div>
+        <div class="ministat">${wi('crown')}<div><div class="v" id="best"></div><div class="k">${L('best match', 'лучший матч')}</div></div></div>
+        <div class="ministat">${wi('chest-icon')}<div><div class="v" id="perMatch"></div><div class="k">${L('average per match', 'в среднем за матч')}</div></div></div>
       </div>
     </div>`, 'home');
 
@@ -402,15 +454,15 @@ async function renderHome() {
     firstDraw = false;
 
     $('#banners').innerHTML = warnBanner(st.recordingWarning) + progressBanner(s.progress);
-    $('#heroSub').textContent = `in ${n(s.matches)} ${matchesW(s.matches)}`;
+    $('#heroSub').textContent = L(`in ${n(s.matches)} ${matchesW(s.matches)}`, `за ${n(s.matches)} ${matchesW(s.matches)}`);
     $('#sMatchesK').textContent = matchesW(ss.matches);
     $('#dMatchesK').textContent = matchesW(s.today.matches);
-    for (const x of s.byType) view.querySelector(`[data-sub="t${x.type}"]`).textContent = `with squad: ${n(x.squad)}`;
+    for (const x of s.byType) view.querySelector(`[data-sub="t${x.type}"]`).textContent = L(`with squad: ${n(x.squad)}`, `с отрядом: ${n(x.squad)}`);
     $('#best').textContent = n(s.best);
     $('#perMatch').textContent = n1(s.perMatch);
     $('#lastMatch').innerHTML = lm
-      ? `<div class="stat"><div class="v gold">+${n(lm.mine)} <small>mine · +${n(lm.squad)} with squad</small></div><div class="d">${esc(lm.mode)} · ${dt(lm.endedUtc)}</div></div>`
-      : '<div class="stat"><div class="v muted">—</div><div class="d">no matches yet</div></div>';
+      ? `<div class="stat"><div class="v gold">+${n(lm.mine)} <small>${L(`mine · +${n(lm.squad)} with squad`, `мои · +${n(lm.squad)} с отрядом`)}</small></div><div class="d">${esc(lm.mode)} · ${dt(lm.endedUtc)}</div></div>`
+      : `<div class="stat"><div class="v muted">—</div><div class="d">${L('no matches yet', 'матчей пока нет')}</div></div>`;
     tickSession();
   };
   update(s0, st0);
@@ -433,50 +485,51 @@ function niceStep(max) {
   const m = raw / p;
   return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p;
 }
-const shortDate = (d) => new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-const longDate = (d) => new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long' });
+const shortDate = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
+const longDate = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'long' });
 
-function axes(parts, W, R, L, top, step, y) {
+function axes(parts, W, R, Lp, top, step, y) {
   for (let v = 0; v <= top; v += step) {
-    parts.push(`<g class="grid"><line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/></g><g class="axis"><text x="${L - 10}" y="${y(v) + 7}" text-anchor="end">${n(v)}</text></g>`);
+    parts.push(`<g class="grid"><line x1="${Lp}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/></g><g class="axis"><text x="${Lp - 10}" y="${y(v) + 7}" text-anchor="end">${n(v)}</text></g>`);
   }
 }
 
 function barChart(el, rows) {
-  const W = 1000, H = 300, L = 70, R = 30, T = 16, B = 44;
+  const W = 1000, H = 300, Lp = 70, R = 30, T = 16, B = 44;
   const max = Math.max(1, ...rows.map((r) => r.squad));
   const step = niceStep(max), top = Math.ceil(max / step) * step;
-  const bw = (W - L - R) / Math.max(rows.length, 1);
+  const bw = (W - Lp - R) / Math.max(rows.length, 1);
   const y = (v) => T + (H - T - B) * (1 - v / top);
   const parts = [`<svg viewBox="0 0 ${W} ${H}" role="img">`];
-  axes(parts, W, R, L, top, step, y);
+  axes(parts, W, R, Lp, top, step, y);
   rows.forEach((r, i) => {
-    const x = L + i * bw, w = Math.max(4, bw * 0.66);
+    const x = Lp + i * bw, w = Math.max(4, bw * 0.66);
     const bar = (x0, ww, v, fill) => `<rect x="${x0}" y="${y(v)}" width="${ww}" height="${Math.max(0, y(0) - y(v))}" rx="3" fill="${fill}" data-i="${i}"/>`;
     parts.push(bar(x + (bw - w) / 2, w, r.squad, SQUAD));
     parts.push(bar(x + (bw - w) / 2 + w * 0.2, w * 0.6, r.mine, ME));
     if (rows.length <= 40 || i % Math.ceil(rows.length / 30) === 0) parts.push(`<g class="axis"><text x="${x + bw / 2}" y="${H - 12}" text-anchor="middle">${esc(shortDate(r.date))}</text></g>`);
   });
   parts.push('</svg>');
-  el.innerHTML = `<div class="legend"><span><i style="background:${ME}"></i>mine</span><span><i style="background:${SQUAD}"></i>with squad</span></div>${parts.join('')}`;
+  const mine = L('mine', 'мои'), withSq = L('with squad', 'с отрядом');
+  el.innerHTML = `<div class="legend"><span><i style="background:${ME}"></i>${mine}</span><span><i style="background:${SQUAD}"></i>${withSq}</span></div>${parts.join('')}`;
   el.querySelectorAll('rect[data-i]').forEach((p) => {
     p.addEventListener('mousemove', (e) => {
       const r = rows[+p.dataset.i];
-      showTip(e, `<b>${esc(longDate(r.date))}</b><br>mine: ${n(r.mine)}<br>with squad: ${n(r.squad)}<br>matches: ${n(r.matches)}`);
+      showTip(e, `<b>${esc(longDate(r.date))}</b><br>${mine}: ${n(r.mine)}<br>${withSq}: ${n(r.squad)}<br>${L('matches', 'матчей')}: ${n(r.matches)}`);
     });
     p.addEventListener('mouseleave', hideTip);
   });
 }
 
 function lineChart(el, rows) {
-  const series = [{ key: 'cumSquad', color: SQUAD, label: 'with squad' }, { key: 'cumMine', color: ME, label: 'mine' }];
-  const W = 1000, H = 300, L = 80, R = 34, T = 16, B = 44;
+  const series = [{ key: 'cumSquad', color: SQUAD, label: L('with squad', 'с отрядом') }, { key: 'cumMine', color: ME, label: L('mine', 'мои') }];
+  const W = 1000, H = 300, Lp = 80, R = 34, T = 16, B = 44;
   const max = Math.max(1, ...rows.flatMap((r) => series.map((s) => r[s.key])));
   const step = niceStep(max), top = Math.ceil(max / step) * step;
-  const x = (i) => L + (W - L - R) * (rows.length <= 1 ? 0.5 : i / (rows.length - 1));
+  const x = (i) => Lp + (W - Lp - R) * (rows.length <= 1 ? 0.5 : i / (rows.length - 1));
   const y = (v) => T + (H - T - B) * (1 - v / top);
   const parts = [`<svg viewBox="0 0 ${W} ${H}" role="img">`];
-  axes(parts, W, R, L, top, step, y);
+  axes(parts, W, R, Lp, top, step, y);
   rows.forEach((r, i) => { if (rows.length <= 40 || i % Math.ceil(rows.length / 30) === 0) parts.push(`<g class="axis"><text x="${x(i)}" y="${H - 12}" text-anchor="middle">${esc(shortDate(r.date))}</text></g>`); });
   for (const s of series) {
     const pts = rows.map((r, i) => `${x(i)},${y(r[s.key])}`).join(' ');
@@ -502,34 +555,35 @@ async function renderHistory() {
   if (seq !== routeSeq) return;
   const counted = matches.filter((m) => m.status === 'counted');
   const skipped = matches.filter((m) => m.status !== 'counted');
+  const min = L('min', 'мин');
   view.innerHTML = page(`
-    <h1>History</h1>
+    <h1>${L('History', 'История')}</h1>
     <div class="grid g2">
-      <div class="panel chart"><h2>Chests per day</h2><div id="c1"></div></div>
-      <div class="panel chart"><h2>Running total</h2><div id="c2"></div></div>
+      <div class="panel chart"><h2>${L('Chests per day', 'Сундуки по дням')}</h2><div id="c1"></div></div>
+      <div class="panel chart"><h2>${L('Running total', 'Нарастающий итог')}</h2><div id="c2"></div></div>
     </div>
-    <div class="section"><h2>Matches · ${n(counted.length)}</h2>
+    <div class="section"><h2>${L('Matches', 'Матчи')} · ${n(counted.length)}</h2>
       ${tableHtml('tMatches', [
-        { label: 'Date', value: (m) => m.startedUtc, html: (m) => dt(m.startedUtc) },
-        { label: 'Mode', value: (m) => m.mode, html: (m) => esc(m.mode) },
-        { label: 'Length', num: true, value: (m) => m.durationMin, html: (m) => `${n1(m.durationMin)} min` },
-        { label: 'Place', num: true, value: (m) => (m.placement == null ? null : -m.placement), html: (m) => rankBadge(m.placement) },
-        { label: 'Mine', num: true, cls: 'big gold', value: (m) => m.mine, html: (m) => n(m.mine) },
-        { label: 'Squad', num: true, cls: 'big sea', value: (m) => m.squad, html: (m) => n(m.squad) },
-      ], counted, { empty: 'No matches yet', sort: { i: 0, dir: 'desc' } })}
+        { label: L('Date', 'Дата'), value: (m) => m.startedUtc, html: (m) => dt(m.startedUtc) },
+        { label: L('Mode', 'Режим'), value: (m) => m.mode, html: (m) => esc(m.mode) },
+        { label: L('Length', 'Длительность'), num: true, value: (m) => m.durationMin, html: (m) => `${n1(m.durationMin)} ${min}` },
+        { label: L('Place', 'Место'), num: true, value: (m) => (m.placement == null ? null : -m.placement), html: (m) => rankBadge(m.placement) },
+        { label: L('Mine', 'Мои'), num: true, cls: 'big gold', value: (m) => m.mine, html: (m) => n(m.mine) },
+        { label: L('Squad', 'Отряд'), num: true, cls: 'big sea', value: (m) => m.squad, html: (m) => n(m.squad) },
+      ], counted, { empty: L('No matches yet', 'Матчей пока нет'), sort: { i: 0, dir: 'desc' } })}
     </div>
-    ${skipped.length ? `<div class="section"><h2>Skipped · ${n(skipped.length)}</h2>
+    ${skipped.length ? `<div class="section"><h2>${L('Skipped', 'Пропущено')} · ${n(skipped.length)}</h2>
       ${tableHtml('tSkipped', [
-        { label: 'Date', value: (m) => m.startedUtc, html: (m) => dt(m.startedUtc, true) },
-        { label: 'Mode', value: (m) => m.playlist, html: (m) => esc(m.playlist || '—') },
-        { label: 'Reason', value: (m) => m.skipReason, cls: 'wrap', html: (m) => esc(m.skipReason) },
+        { label: L('Date', 'Дата'), value: (m) => m.startedUtc, html: (m) => dt(m.startedUtc, true) },
+        { label: L('Mode', 'Режим'), value: (m) => m.playlist, html: (m) => esc(m.playlist || '—') },
+        { label: L('Reason', 'Причина'), value: (m) => m.skipReason, cls: 'wrap', html: (m) => esc(m.skipReason) },
       ], skipped, { sort: { i: 0, dir: 'desc' } })}</div>` : ''}`);
   bindTables(view);
   if (daily.length) {
     barChart($('#c1'), daily);
     lineChart($('#c2'), daily);
   } else {
-    $('#c1').innerHTML = $('#c2').innerHTML = '<div class="empty">No data</div>';
+    $('#c1').innerHTML = $('#c2').innerHTML = `<div class="empty">${L('No data', 'Нет данных')}</div>`;
   }
 }
 
@@ -541,31 +595,32 @@ async function renderEfficiency() {
   if (seq !== routeSeq) return;
   const o = e.overall;
   const ranked = [...e.ranking].sort((a, b) => b.cpm - a.cpm || b.avgMine - a.avgMine).map((r, i) => ({ ...r, rank: i + 1 }));
+  const min = L('min', 'мин');
   view.innerHTML = page(`
-    <h1>Farming efficiency</h1>
+    <h1>${L('Farming efficiency', 'Эффективность фарма')}</h1>
     <div class="grid g3">
-      <div class="tile stattile">${wi('timer', 'pic')}<div class="value">${n1(o.cpm)}</div><div class="name">Per minute</div><div class="sub">chests per minute in game</div></div>
-      <div class="tile stattile">${wi('chest-icon', 'pic')}<div class="value">${n1(o.perMatch)}</div><div class="name">Per match</div><div class="sub">on average</div></div>
-      <div class="tile stattile">${wi('crown', 'pic')}<div class="value">${n(o.best)}</div><div class="name">Record</div><div class="sub">best match</div></div>
+      <div class="tile stattile">${wi('timer', 'pic')}<div class="value">${n1(o.cpm)}</div><div class="name">${L('Per minute', 'В минуту')}</div><div class="sub">${L('chests per minute in game', 'сундуков за минуту игры')}</div></div>
+      <div class="tile stattile">${wi('chest-icon', 'pic')}<div class="value">${n1(o.perMatch)}</div><div class="name">${L('Per match', 'За матч')}</div><div class="sub">${L('on average', 'в среднем')}</div></div>
+      <div class="tile stattile">${wi('crown', 'pic')}<div class="value">${n(o.best)}</div><div class="name">${L('Record', 'Рекорд')}</div><div class="sub">${L('best match', 'лучший матч')}</div></div>
     </div>
-    <div class="section"><h2>Landing spots</h2>
+    <div class="section"><h2>${L('Landing spots', 'Рейтинг мест высадки')}</h2>
       ${tableHtml('tRank', [
         { label: '#', num: true, value: (r) => -r.rank, html: (r) => rankBadge(r.rank) },
-        { label: 'Spot', value: (r) => r.name, html: (r) => `<span class="placename">${r.isPoi ? icon('pin') : ''}${esc(r.name)}</span>` },
-        { label: 'Matches', num: true, value: (r) => r.matches, html: (r) => n(r.matches) },
-        { label: 'Per minute', num: true, cls: 'big gold', value: (r) => r.cpm, html: (r) => n1(r.cpm) },
-        { label: 'Per match', num: true, value: (r) => r.avgMine, html: (r) => n1(r.avgMine) },
-        { label: 'Best', num: true, value: (r) => r.best, html: (r) => n(r.best) },
+        { label: L('Spot', 'Место'), value: (r) => r.name, html: (r) => `<span class="placename">${r.isPoi ? icon('pin') : ''}${esc(r.name)}</span>` },
+        { label: L('Matches', 'Матчей'), num: true, value: (r) => r.matches, html: (r) => n(r.matches) },
+        { label: L('Per minute', 'В минуту'), num: true, cls: 'big gold', value: (r) => r.cpm, html: (r) => n1(r.cpm) },
+        { label: L('Per match', 'За матч'), num: true, value: (r) => r.avgMine, html: (r) => n1(r.avgMine) },
+        { label: L('Best', 'Лучший'), num: true, value: (r) => r.best, html: (r) => n(r.best) },
       ], ranked, { sort: { i: 0, dir: 'desc' }, rowCls: (r) => topCls(r.rank) })}
     </div>
-    <div class="section"><h2>By match</h2>
+    <div class="section"><h2>${L('By match', 'По матчам')}</h2>
       ${tableHtml('tEffMatches', [
-        { label: 'Date', value: (m) => m.startedUtc, html: (m) => dt(m.startedUtc) },
-        { label: 'Mode', value: (m) => m.mode, html: (m) => esc(m.mode) },
-        { label: 'Landing', value: (m) => m.place, html: (m) => `<span class="placename">${esc(m.place)}</span>` },
-        { label: 'In game', num: true, value: (m) => m.minutes, html: (m) => `${n1(m.minutes)} min` },
-        { label: 'Mine', num: true, cls: 'big gold', value: (m) => m.mine, html: (m) => n(m.mine) },
-        { label: 'Per minute', num: true, value: (m) => m.cpm, html: (m) => n1(m.cpm) },
+        { label: L('Date', 'Дата'), value: (m) => m.startedUtc, html: (m) => dt(m.startedUtc) },
+        { label: L('Mode', 'Режим'), value: (m) => m.mode, html: (m) => esc(m.mode) },
+        { label: L('Landing', 'Высадка'), value: (m) => m.place, html: (m) => `<span class="placename">${esc(m.place)}</span>` },
+        { label: L('In game', 'В игре'), num: true, value: (m) => m.minutes, html: (m) => `${n1(m.minutes)} ${min}` },
+        { label: L('Mine', 'Мои'), num: true, cls: 'big gold', value: (m) => m.mine, html: (m) => n(m.mine) },
+        { label: L('Per minute', 'В минуту'), num: true, value: (m) => m.cpm, html: (m) => n1(m.cpm) },
       ], [...e.matches], { sort: { i: 0, dir: 'desc' } })}
     </div>`);
   bindTables(view);
@@ -575,10 +630,10 @@ async function renderEfficiency() {
 
 /** How many times I opened a chest → marker colour and size (CSS px). */
 const LOOT_CLASSES = [
-  { min: 1, color: '#f4e39a', ink: '#2a2310', r: 4, label: 'once' },
-  { min: 2, color: '#f0b43c', ink: '#2a2008', r: 6, label: '2–3' },
-  { min: 4, color: '#e47834', ink: '#2a1306', r: 7, label: '4–6' },
-  { min: 7, color: '#d2463e', ink: '#ffffff', r: 8.5, label: '7 or more' },
+  { min: 1, color: '#f4e39a', ink: '#2a2310', r: 4, label: () => L('once', '1 раз') },
+  { min: 2, color: '#f0b43c', ink: '#2a2008', r: 6, label: () => '2–3' },
+  { min: 4, color: '#e47834', ink: '#2a1306', r: 7, label: () => '4–6' },
+  { min: 7, color: '#d2463e', ink: '#ffffff', r: 8.5, label: () => L('7 or more', '7 и больше') },
 ];
 const lootClass = (k) => [...LOOT_CLASSES].reverse().find((c) => k >= c.min);
 
@@ -588,31 +643,31 @@ async function renderMap() {
   if (seq !== routeSeq) return;
   const counted = matches.filter((m) => m.status === 'counted');
   view.innerHTML = page(`
-    <h1>Map</h1>
+    <h1>${L('Map', 'Карта')}</h1>
     <div class="maplayout">
       <div class="mapcol"><div class="mapframe"><canvas id="mapc" width="1200" height="1200"></canvas>
-        <div class="zoom"><button class="icon" id="zIn" title="Zoom in">+</button><button class="icon" id="zOut" title="Zoom out">−</button></div>
-        ${status.hasMap ? '<div class="credit">Map: Fortnite © Epic Games</div>' : ''}</div></div>
+        <div class="zoom"><button class="icon" id="zIn" title="${L('Zoom in', 'Приблизить')}">+</button><button class="icon" id="zOut" title="${L('Zoom out', 'Отдалить')}">−</button></div>
+        ${status.hasMap ? `<div class="credit">${L('Map: Fortnite © Epic Games', 'Карта: Fortnite © Epic Games')}</div>` : ''}</div></div>
       <div class="mapside">
         <div class="panel">
-          <h3>Show</h3>
-          <select id="mMatch"><option value="">All matches</option>${counted.map((m) => `<option value="${esc(m.id)}">${dt(m.startedUtc)} · ${esc(m.mode)} · ${n(m.mine)}</option>`).join('')}</select>
-          <select id="mType"><option value="">All chest types</option>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('')}</select>
+          <h3>${L('Show', 'Что показать')}</h3>
+          <select id="mMatch"><option value="">${L('All matches', 'Все матчи')}</option>${counted.map((m) => `<option value="${esc(m.id)}">${dt(m.startedUtc)} · ${esc(m.mode)} · ${n(m.mine)}</option>`).join('')}</select>
+          <select id="mType"><option value="">${L('All chest types', 'Все типы сундуков')}</option>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v.name()}</option>`).join('')}</select>
           <div class="layers">
-            <label class="chk"><input type="checkbox" id="lMe" checked> opened by me</label>
-            <label class="chk"><input type="checkbox" id="lSquad" checked> opened only by squad</label>
-            <label class="chk"><input type="checkbox" id="lOther" checked> other chests</label>
-            <label class="chk"><input type="checkbox" id="lHeat"> heat map</label>
+            <label class="chk"><input type="checkbox" id="lMe" checked> ${L('opened by me', 'открытые мной')}</label>
+            <label class="chk"><input type="checkbox" id="lSquad" checked> ${L('opened only by squad', 'открытые только отрядом')}</label>
+            <label class="chk"><input type="checkbox" id="lOther" checked> ${L('other chests', 'остальные сундуки')}</label>
+            <label class="chk"><input type="checkbox" id="lHeat"> ${L('heat map', 'тепловая карта')}</label>
           </div>
         </div>
         <div class="panel">
-          <h3>How many times I opened</h3>
+          <h3>${L('How many times I opened', 'Сколько раз я открыл')}</h3>
           <div class="maplegend">
-            ${LOOT_CLASSES.map((c) => `<div><span class="sw"><span class="mk" style="width:${2 * c.r + 2}px;height:${2 * c.r + 2}px;background:${c.color}"></span></span>${c.label}</div>`).join('')}
-            <div><span class="sw"><span class="mk" style="width:10px;height:10px;background:rgba(0,0,0,.35);border:2px solid var(--squad)"></span></span>squad only</div>
-            <div><span class="sw"><span class="mk" style="width:5px;height:5px;background:rgba(205,212,224,.7);border:0"></span></span>others</div>
+            ${LOOT_CLASSES.map((c) => `<div><span class="sw"><span class="mk" style="width:${2 * c.r + 2}px;height:${2 * c.r + 2}px;background:${c.color}"></span></span>${c.label()}</div>`).join('')}
+            <div><span class="sw"><span class="mk" style="width:10px;height:10px;background:rgba(0,0,0,.35);border:2px solid var(--squad)"></span></span>${L('squad only', 'только отряд')}</div>
+            <div><span class="sw"><span class="mk" style="width:5px;height:5px;background:rgba(205,212,224,.7);border:0"></span></span>${L('others', 'остальные')}</div>
           </div>
-          <div class="maphint">The number is how many times. Scroll to zoom, drag to move the map.</div>
+          <div class="maphint">${L('The number is how many times. Scroll to zoom, drag to move the map.', 'Цифра на кружке — сколько раз. Колёсико мыши приближает, карту можно двигать.')}</div>
         </div>
         <div class="panel" id="mStats"></div>
       </div>
@@ -646,12 +701,12 @@ function renderMapStats(mv) {
   const total = list.reduce((a, c) => a + c.me, 0);
   const top = list.reduce((a, c) => Math.max(a, c.me), 0);
   const again = list.filter((c) => c.me > 1).length;
-  $('#mStats').innerHTML = `<h3>Opened by me</h3>
+  $('#mStats').innerHTML = `<h3>${L('Opened by me', 'Открыто мной')}</h3>
     <div class="kv">
-      <div>Different chests</div><div class="num">${n(list.length)}</div>
-      <div>Total opens</div><div class="num">${n(total)}</div>
-      <div>Opened again</div><div class="num">${n(again)}</div>
-      <div>Most often</div><div class="num">${top ? `${n(top)} ${timesW(top)}` : '—'}</div>
+      <div>${L('Different chests', 'Разных сундуков')}</div><div class="num">${n(list.length)}</div>
+      <div>${L('Total opens', 'Всего открытий')}</div><div class="num">${n(total)}</div>
+      <div>${L('Opened again', 'Открывал повторно')}</div><div class="num">${n(again)}</div>
+      <div>${L('Most often', 'Чаще всего')}</div><div class="num">${top ? `${n(top)} ${timesW(top)}` : '—'}</div>
     </div>`;
 }
 
@@ -755,10 +810,16 @@ class MapView {
     if (!best) { hideTip(); return; }
     const ch = best.chest;
     const all = !$('#mMatch')?.value;
-    if (!ch) { showTip(e, `<b>Chest</b><br>${all ? 'nobody in the squad has opened it yet' : 'not opened in this match'}`); return; }
-    const lines = [`<b>${esc(TYPES[ch.type]?.one ?? 'Chest')}</b>`];
-    if (ch.me) lines.push(`I opened it ${n(ch.me)} ${timesW(ch.me)}${all && ch.matches !== ch.me ? ` (in ${n(ch.matches)} ${matchesW(ch.matches)})` : ''}`);
-    if (ch.squad) lines.push(`squad: ${n(ch.squad)} ${timesW(ch.squad)}`);
+    if (!ch) {
+      showTip(e, `<b>${L('Chest', 'Сундук')}</b><br>${all ? L('nobody in the squad has opened it yet', 'ещё никто из отряда не открывал') : L('not opened in this match', 'в этом матче не открывали')}`);
+      return;
+    }
+    const lines = [`<b>${esc(TYPES[ch.type]?.one() ?? L('Chest', 'Сундук'))}</b>`];
+    if (ch.me) {
+      const inM = all && ch.matches !== ch.me ? ` (${L('in', 'в')} ${n(ch.matches)} ${pl(ch.matches, 'match', 'matches', 'матче', 'матчах', 'матчах')})` : '';
+      lines.push(`${L(`I opened it ${n(ch.me)} ${timesW(ch.me)}`, `я открыл: ${n(ch.me)} ${timesW(ch.me)}`)}${inM}`);
+    }
+    if (ch.squad) lines.push(`${L('squad', 'отряд')}: ${n(ch.squad)} ${timesW(ch.squad)}`);
     showTip(e, lines.join('<br>'));
   }
 
@@ -766,18 +827,18 @@ class MapView {
     const { ctx, c } = this;
     if (!this.a) return;
     const R = this.ratio;
-    const L = this.layers;
+    const Ly = this.layers;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, c.width, c.height);
     ctx.setTransform(this.zoom, 0, 0, this.zoom, this.ox, this.oy);
     if (this.img) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(this.img, 0, 0, c.width, c.height); } else { ctx.fillStyle = '#16233a'; ctx.fillRect(0, 0, c.width, c.height); }
-    const chests = this.data.chests.filter((ch) => !L.type || ch.type === L.type);
-    if (L.heat) ctx.drawImage(this.heat(chests), 0, 0);
+    const chests = this.data.chests.filter((ch) => !Ly.type || ch.type === Ly.type);
+    if (Ly.heat) ctx.drawImage(this.heat(chests), 0, 0);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = 'rgba(6, 11, 24, .22)'; // calm the map down so markers read better
     ctx.fillRect(0, 0, c.width, c.height);
     this.drawn = [];
-    if (L.heat) return;
+    if (Ly.heat) return;
 
     const zf = 1 + 0.35 * Math.log2(this.zoom);
     const dot = (q, r, fill, stroke, lw) => {
@@ -785,14 +846,14 @@ class MapView {
       if (fill) { ctx.fillStyle = fill; ctx.fill(); }
       if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
     };
-    if (L.other && !L.type) {
+    if (Ly.other && !Ly.type) {
       for (const o of this.data.others) {
         const q = this.toScreen(o.x, o.y), r = 1.9 * R * zf;
         dot(q, r, 'rgba(205,212,224,.55)', 'rgba(0,0,0,.4)', 0.7 * R);
         this.drawn.push({ ...q, r, chest: null });
       }
     }
-    if (L.squad) {
+    if (Ly.squad) {
       for (const ch of chests) {
         if (ch.me > 0 || ch.squad === 0) continue;
         const q = this.toScreen(ch.x, ch.y), r = 3.6 * R * zf;
@@ -800,7 +861,7 @@ class MapView {
         this.drawn.push({ ...q, r, chest: ch });
       }
     }
-    if (L.me) {
+    if (Ly.me) {
       const mine = chests.filter((ch) => ch.me > 0).sort((a, b) => a.me - b.me); // the most looted on top
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -820,14 +881,14 @@ class MapView {
 
   /** Heat map in base (unzoomed) canvas coordinates, weighted by how often the chest was opened. */
   heat(chests) {
-    const { c, layers: L } = this;
+    const { c, layers: Ly } = this;
     const off = document.createElement('canvas');
     off.width = c.width; off.height = c.height;
     const o = off.getContext('2d');
     const r = 26 * (c.width / 1200);
     o.globalCompositeOperation = 'lighter';
     for (const ch of chests) {
-      const w = (L.me ? ch.me : 0) + (L.squad ? ch.squad : 0);
+      const w = (Ly.me ? ch.me : 0) + (Ly.squad ? ch.squad : 0);
       if (!w) continue;
       const q = this.toBase(ch.x, ch.y);
       const g = o.createRadialGradient(q.x, q.y, 0, q.x, q.y, r);
@@ -856,30 +917,29 @@ async function renderOverlay() {
   const seq = routeSeq;
   let o = await api('/api/overlay');
   if (seq !== routeSeq) return;
-  let st = o.settings;
+  const st = o.settings;
   const seg = (key, opts) => `<div class="seg" data-seg="${key}">${opts.map(([v, l]) => `<button data-v="${v}" class="${st[key] === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   const sw = (key) => `<button class="switch ${st[key] ? 'on' : ''}" data-sw="${key}" aria-label="${key}"></button>`;
   view.innerHTML = page(`
-    <h1>Overlay</h1>
+    <h1>${L('Overlay', 'Оверлей')}</h1>
     <div class="ovl">
       <div class="panel"><div class="rows">
-        <div class="row"><div class="label">Overlay</div><div class="ctrl">${sw('enabled')}<span class="muted" id="ovState"></span></div></div>
-        <div class="row"><div class="label">Number</div><div class="ctrl">${seg('show', [['total', 'Total'], ['session', 'Session'], ['today', 'Today']])}</div></div>
-        <div class="row"><div class="label">Position</div><div class="ctrl"><button id="ovMove"></button><button id="ovReset">Reset</button></div></div>
-        <div class="row"><div class="label">Size</div><div class="ctrl"><input type="range" min="50" max="300" step="5" id="ovScale" value="${st.scale}" style="flex:1"><span class="val" id="ovScaleV"></span></div></div>
-        <div class="row"><div class="label">Number colour</div><div class="ctrl"><div class="swatches">${SWATCHES.map((c) => `<button class="swatch" data-c="${c}" style="background:${c}"></button>`).join('')}<input type="color" id="ovColor" value="${st.color}" title="Custom colour"></div></div></div>
-        <div class="row"><div class="label">Background</div><div class="ctrl">${seg('background', [['none', 'None'], ['dark', 'Dark'], ['glass', 'Glass']])}</div></div>
-        <div class="row"><div class="label">Background opacity</div><div class="ctrl"><input type="range" min="0" max="100" step="5" id="ovOpacity" value="${st.opacity}" style="flex:1"><span class="val" id="ovOpacityV"></span></div></div>
-        <div class="row"><div class="label">Chest icon</div><div class="ctrl">${sw('icon')}</div></div>
-        <div class="row"><div class="label">Label</div><div class="ctrl">${sw('label')}</div></div>
-        <div class="row"><div class="label">Show</div><div class="ctrl">${seg('when', [['fortnite', 'Only over Fortnite'], ['always', 'Always']])}</div></div>
+        <div class="row"><div class="label">${L('Overlay', 'Оверлей')}</div><div class="ctrl">${sw('enabled')}<span class="muted" id="ovState"></span></div></div>
+        <div class="row"><div class="label">${L('Number', 'Число')}</div><div class="ctrl">${seg('show', [['total', L('Total', 'Всего')], ['session', L('Session', 'Сессия')], ['today', L('Today', 'Сегодня')]])}</div></div>
+        <div class="row"><div class="label">${L('Position', 'Положение')}</div><div class="ctrl"><button id="ovMove"></button><button id="ovReset">${L('Reset', 'Сбросить')}</button></div></div>
+        <div class="row"><div class="label">${L('Size', 'Размер')}</div><div class="ctrl"><input type="range" min="50" max="300" step="5" id="ovScale" value="${st.scale}" style="flex:1"><span class="val" id="ovScaleV"></span></div></div>
+        <div class="row"><div class="label">${L('Number colour', 'Цвет цифр')}</div><div class="ctrl"><div class="swatches">${SWATCHES.map((c) => `<button class="swatch" data-c="${c}" style="background:${c}"></button>`).join('')}<input type="color" id="ovColor" value="${st.color}" title="${L('Custom colour', 'Свой цвет')}"></div></div></div>
+        <div class="row"><div class="label">${L('Background', 'Подложка')}</div><div class="ctrl">${seg('background', [['none', L('None', 'Нет')], ['dark', L('Dark', 'Тёмная')], ['glass', L('Glass', 'Стекло')]])}</div></div>
+        <div class="row"><div class="label">${L('Background opacity', 'Прозрачность подложки')}</div><div class="ctrl"><input type="range" min="0" max="100" step="5" id="ovOpacity" value="${st.opacity}" style="flex:1"><span class="val" id="ovOpacityV"></span></div></div>
+        <div class="row"><div class="label">${L('Chest icon', 'Иконка сундука')}</div><div class="ctrl">${sw('icon')}</div></div>
+        <div class="row"><div class="label">${L('Label', 'Подпись')}</div><div class="ctrl">${sw('label')}</div></div>
+        <div class="row"><div class="label">${L('Show', 'Показывать')}</div><div class="ctrl">${seg('when', [['fortnite', L('Only over Fortnite', 'Только поверх Fortnite')], ['always', L('Always', 'Всегда')]])}</div></div>
       </div></div>
       <div>
         <div class="preview" style="background-image:url(/map.png)"><div class="ov" id="ovPreview"></div></div>
-        <div class="hint">The overlay is a separate window on top of the game: it does not touch Fortnite. With "Only over Fortnite" it
-          shows only while the Fortnite window is the active one and hides when you switch away. It is visible over the game in
-          <b>Windowed Fullscreen</b> or <b>Windowed</b> display mode. The number updates about half a minute after each match ends;
-          (+N) is what the last match added. Clicks go through it; use Move to drag it into place.</div>
+        <div class="hint">${L(
+          'The overlay is a separate window on top of the game: it does not touch Fortnite. With "Only over Fortnite" it shows only while the Fortnite window is the active one and hides when you switch away. It is visible over the game in <b>Windowed Fullscreen</b> or <b>Windowed</b> display mode. The number updates about half a minute after each match ends; (+N) is what the last match added. Clicks go through it; use Move to drag it into place.',
+          'Оверлей — отдельное окно поверх игры, в Fortnite он не вмешивается. В режиме «Только поверх Fortnite» он виден, только пока окно Fortnite активно, и прячется, когда вы переключаетесь. Поверх игры он виден в режимах экрана <b>«Оконный полноэкранный»</b> и <b>«Оконный»</b>. Число обновляется примерно через полминуты после конца матча; (+N) — сколько принёс последний матч. Клики проходят сквозь оверлей; чтобы поставить его на место, нажмите «Переместить».')}</div>
       </div>
     </div>`);
 
@@ -900,12 +960,13 @@ async function renderOverlay() {
     view.querySelectorAll('.swatch').forEach((b) => b.classList.toggle('on', b.dataset.c.toLowerCase() === st.color.toLowerCase()));
     $('#ovScaleV').textContent = `${st.scale}%`;
     $('#ovOpacityV').textContent = `${st.opacity}%`;
-    $('#ovMove').textContent = o.moving ? 'Done' : 'Move';
+    $('#ovMove').textContent = o.moving ? L('Done', 'Готово') : L('Move', 'Переместить');
     $('#ovMove').classList.toggle('primary', o.moving);
-    $('#ovState').textContent = !st.enabled ? 'off' : st.when === 'fortnite' ? 'on, shows while the Fortnite window is active' : 'on';
-    const label = st.show === 'session' ? 'SESSION' : st.show === 'today' ? 'TODAY' : 'MY CHESTS';
+    $('#ovState').textContent = !st.enabled ? L('off', 'выключен')
+      : st.when === 'fortnite' ? L('on, shows while the Fortnite window is active', 'включён, виден, пока окно Fortnite активно') : L('on', 'включён');
+    const label = st.show === 'session' ? L('SESSION', 'СЕССИЯ') : st.show === 'today' ? L('TODAY', 'СЕГОДНЯ') : L('MY CHESTS', 'МОИ СУНДУКИ');
     const box = `<div class="ovbox ${st.background}${st.opacity < 15 ? ' bare' : ''}" style="--op:${st.opacity / 100}">
-      ${st.icon ? '<img src="/img/chest.webp" alt="">' : ''}
+      ${st.icon ? '<img src="/img/chest.png" alt="">' : ''}
       <div>${st.label ? `<div class="ol">${label}</div>` : ''}<div class="on" style="color:${esc(st.color)}">${n(o.value)}${o.delta > 0 ? ` <span class="od">(+${n(o.delta)})</span>` : ''}</div></div></div>`;
     const pv = $('#ovPreview');
     pv.innerHTML = box;
@@ -946,8 +1007,16 @@ async function renderOverlay() {
 // ---------------------------------------------------------------- settings
 
 const size = (bytes) => (bytes >= 1073741824
-  ? `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(bytes / 1073741824)} GB`
-  : `${Math.round(bytes / 1048576)} MB`);
+  ? `${new Intl.NumberFormat(numLocale(), { maximumFractionDigits: 1 }).format(bytes / 1073741824)} ${L('GB', 'ГБ')}`
+  : `${Math.round(bytes / 1048576)} ${L('MB', 'МБ')}`);
+
+async function setLanguage(code) {
+  const r = await post('/api/settings', { lang: code });
+  LANG = r.lang === 'ru' ? 'ru' : 'en';
+  applyLang();
+  measureDigitTop();
+  route();
+}
 
 async function renderSettings() {
   const seq = routeSeq;
@@ -956,44 +1025,48 @@ async function renderSettings() {
     if (seq !== routeSeq) return;
     const p = s.progress;
     view.innerHTML = page(`
-      <h1>Settings</h1>
+      <h1>${L('Settings', 'Настройки')}</h1>
       ${warnBanner(s.recordingWarning)}
-      <div class="grid g2">
+      <div class="panel">
+        <div class="row" style="border:0;padding:0"><div class="label">${L('Language', 'Язык')}</div><div class="ctrl">
+          <div class="seg" id="langSeg"><button data-lang="en" class="${LANG === 'en' ? 'on' : ''}">English</button><button data-lang="ru" class="${LANG === 'ru' ? 'on' : ''}">Русский</button></div>
+        </div></div>
+      </div>
+      <div class="grid g2 section">
         <div class="panel">
-          <h2>Program</h2>
+          <h2>${L('Program', 'Программа')}</h2>
           <div class="kv">
-            <div>Version</div><div class="num">v${esc(s.version)}</div>
-            <div>Updates</div><div>${esc(s.update.status)}</div>
-            <div>Start with Windows</div><div>${s.autostart ? 'on' : 'off'}</div>
+            <div>${L('Version', 'Версия')}</div><div class="num">v${esc(s.version)}</div>
+            <div>${L('Updates', 'Обновления')}</div><div>${esc(s.update.status)}</div>
+            <div>${L('Start with Windows', 'Запуск с Windows')}</div><div>${s.autostart ? L('on', 'включён') : L('off', 'выключен')}</div>
           </div>
-          <div style="margin-top:18px"><button class="primary" id="upd">${icon('refresh')}<span>Check for updates</span></button></div>
+          <div style="margin-top:18px"><button class="primary" id="upd">${icon('refresh')}<span>${L('Check for updates', 'Проверить обновления')}</span></button></div>
         </div>
         <div class="panel">
-          <h2>Replays</h2>
+          <h2>${L('Replays', 'Реплеи')}</h2>
           <div class="kv">
-            <div>In the Fortnite folder</div><div>${s.demosFound ? n(s.replayFiles) : 'no folder'}</div>
-            <div>Copies saved</div><div>${n(s.backups)} · ${size(s.backupBytes)}</div>
-            <div>Latest</div><div>${s.newestReplayUtc ? `${dt(s.newestReplayUtc)} · ${ago(s.newestReplayUtc)}` : '—'}</div>
-            <div>Fortnite</div><div>${s.fortniteRunning ? 'running' : 'not running'}</div>
-            ${p.busy ? `<div>Counting</div><div>${n(p.done)} of ${n(p.total || p.pending)}</div>` : ''}
+            <div>${L('In the Fortnite folder', 'В папке Fortnite')}</div><div>${s.demosFound ? n(s.replayFiles) : L('no folder', 'папки нет')}</div>
+            <div>${L('Copies saved', 'Сохранено копий')}</div><div>${n(s.backups)} · ${size(s.backupBytes)}</div>
+            <div>${L('Latest', 'Последний')}</div><div>${s.newestReplayUtc ? `${dt(s.newestReplayUtc)} · ${ago(s.newestReplayUtc)}` : '—'}</div>
+            <div>Fortnite</div><div>${s.fortniteRunning ? L('running', 'запущен') : L('not running', 'не запущен')}</div>
+            ${p.busy ? `<div>${L('Counting', 'Считаю')}</div><div>${L(`${n(p.done)} of ${n(p.total || p.pending)}`, `${n(p.done)} из ${n(p.total || p.pending)}`)}</div>` : ''}
           </div>
-          <div style="margin-top:18px"><button id="recount">${icon('refresh')}<span>Recount everything</span></button></div>
+          <div style="margin-top:18px"><button id="recount">${icon('refresh')}<span>${L('Recount everything', 'Пересчитать всё')}</span></button></div>
         </div>
       </div>
       <div class="panel section">
-        <h2>How to turn on replay recording</h2>
-        <ol class="steps">
-          <li>In Fortnite open the menu → <b>Settings</b>.</li>
-          <li><b>Game</b> tab → <b>Replays</b> section.</li>
-          <li>Turn on <b>Record Replays</b> for Battle Royale.</li>
-          <li>Play: the counter updates itself after every match.</li>
-        </ol>
+        <h2>${L('How to turn on replay recording', 'Как включить запись повторов')}</h2>
+        <ol class="steps">${L(
+          '<li>In Fortnite open the menu → <b>Settings</b>.</li><li><b>Game</b> tab → <b>Replays</b> section.</li><li>Turn on <b>Record Replays</b> for Battle Royale.</li><li>Play: the counter updates itself after every match.</li>',
+          '<li>В Fortnite откройте меню → <b>Настройки</b>.</li><li>Вкладка <b>«Игра»</b> → раздел <b>«Повторы»</b>.</li><li>Включите <b>запись повторов</b> для Королевской битвы.</li><li>Играйте — после каждого матча счётчик обновится сам.</li>')}</ol>
       </div>
-      <div class="fine">Replay copies are kept in the program's data folder and are never deleted by the program, even by a full
-        uninstall. Portions of the materials used are trademarks and/or copyrighted works of Epic Games, Inc. All rights reserved by Epic.
+      <div class="fine">${L('Replay copies are kept in the program\'s data folder and are never deleted by the program, even by a full uninstall.',
+        'Копии реплеев лежат в папке данных программы, и программа их никогда не удаляет, даже при полном удалении.')}
+        Portions of the materials used are trademarks and/or copyrighted works of Epic Games, Inc. All rights reserved by Epic.
         This material is not official and is not endorsed by Epic.</div>`, settled ? 'settled' : '');
+    view.querySelectorAll('#langSeg button').forEach((b) => b.addEventListener('click', () => { if (b.dataset.lang !== LANG) setLanguage(b.dataset.lang).catch(() => {}); }));
     $('#recount').addEventListener('click', async (e) => { e.currentTarget.disabled = true; await post('/api/recount'); setTimeout(() => draw(true).catch(() => {}), 1500); });
-    $('#upd').addEventListener('click', async (e) => { const b = e.currentTarget; b.disabled = true; b.querySelector('span').textContent = 'Checking…'; await post('/api/update/check'); draw(true).catch(() => {}); });
+    $('#upd').addEventListener('click', async (e) => { const b = e.currentTarget; b.disabled = true; b.querySelector('span').textContent = L('Checking…', 'Проверяю…'); await post('/api/update/check'); draw(true).catch(() => {}); });
   };
   await draw(false);
   every(5000, () => draw(true).catch(() => {}));
@@ -1003,8 +1076,13 @@ async function renderSettings() {
 
 (async () => {
   try {
+    LANG = (await api('/api/settings')).lang === 'ru' ? 'ru' : 'en';
+  } catch { /* English */ }
+  applyLang();
+  try {
     await Promise.all([document.fonts.load('30px "Burbank Big"'), document.fonts.load('16px "Burbank Small"')]);
   } catch { /* fall back to system fonts */ }
+  measureDigitTop();
   requestAnimationFrame(() => document.body.classList.remove('booting'));
   route();
 })();

@@ -56,17 +56,27 @@ public sealed class TrayApp : ApplicationContext
         _overlaySettings = OverlaySettings.Load(s.Db);
 
         var menu = new ContextMenuStrip();
-        var open = new ToolStripMenuItem("Open", null, (_, _) => ShowWindow()) { Font = new Font(SystemFonts.MenuFont ?? Control.DefaultFont, FontStyle.Bold) };
-        _overlayItem = new ToolStripMenuItem("Overlay", null, (_, _) => ToggleOverlay());
-        var recount = new ToolStripMenuItem("Recount everything", null, (_, _) => _s.Processor.RecountAll());
-        _autostart = new ToolStripMenuItem("Start with Windows", null, (_, _) => ToggleAutostart());
-        var exit = new ToolStripMenuItem("Exit", null, (_, _) => ExitThread());
+        var open = new ToolStripMenuItem("", null, (_, _) => ShowWindow()) { Font = new Font(SystemFonts.MenuFont ?? Control.DefaultFont, FontStyle.Bold) };
+        _overlayItem = new ToolStripMenuItem("", null, (_, _) => ToggleOverlay());
+        var recount = new ToolStripMenuItem("", null, (_, _) => _s.Processor.RecountAll());
+        _autostart = new ToolStripMenuItem("", null, (_, _) => ToggleAutostart());
+        var exit = new ToolStripMenuItem("", null, (_, _) => ExitThread());
         menu.Items.AddRange(new ToolStripItem[] { open, _overlayItem, recount, _autostart, new ToolStripSeparator(), exit });
         menu.Opening += (_, _) =>
         {
+            open.Text = Lang.T("Открыть", "Open");
+            _overlayItem.Text = Lang.T("Оверлей", "Overlay");
+            recount.Text = Lang.T("Пересчитать всё", "Recount everything");
+            _autostart.Text = Lang.T("Запускать с Windows", "Start with Windows");
+            exit.Text = Lang.T("Выход", "Exit");
             _autostart.Checked = Autostart.IsEnabled();
             _overlayItem.Checked = _overlaySettings.Enabled;
         };
+        Lang.Changed += () => _ui.Post(_ =>
+        {
+            UpdateTooltip();
+            _overlay?.Apply(_overlaySettings.Clone()); // the overlay label follows the language
+        }, null);
 
         _icon = new NotifyIcon
         {
@@ -255,7 +265,7 @@ public sealed class TrayApp : ApplicationContext
     {
         try
         {
-            var t = $"{AppInfo.DisplayName}: {TotalMine():N0} chests";
+            var t = Lang.T($"{AppInfo.DisplayName}: {TotalMine():N0} сундуков", $"{AppInfo.DisplayName}: {TotalMine():N0} chests");
             _icon.Text = t.Length > 63 ? t[..63] : t;
         }
         catch

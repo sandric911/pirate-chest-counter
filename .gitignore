@@ -27,8 +27,6 @@ instance.json
 *nick*
 *account*
 
-# Local tooling
-.claude/settings.local.json
 
 # Burbank fonts (House Industries, licensed) live in src/PirateChest.App/wwwroot/fonts.
 # The repo is PRIVATE because of them: do not make it public without removing them from history.

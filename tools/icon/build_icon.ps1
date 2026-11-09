@@ -66,8 +66,8 @@ if (-not $Out) {
 
 if ($OverlayChest) {
   $html = Join-Path $tmp 'chest.html'
-  $img = ([Uri](Join-Path $root 'src\PirateChest.App\wwwroot\img\chest.webp')).AbsoluteUri
-  Set-Content -Path $html -Encoding utf8 -Value "<!doctype html><html><body style='margin:0;background:transparent'><img src='$img' style='display:block;width:160px;height:160px;margin:-16px;-webkit-mask-image:radial-gradient(circle at 50% 54%,#000 50%,transparent 70%)'></body></html>"
+  $img = ([Uri](Join-Path $root 'src\PirateChest.App\wwwroot\img\chest.png')).AbsoluteUri
+  Set-Content -Path $html -Encoding utf8 -Value "<!doctype html><html><body style='margin:0;background:transparent'><img src='$img' style='display:block;width:128px;height:128px'></body></html>"
   Shot ([Uri]$html).AbsoluteUri 128 (Join-Path $root 'src\PirateChest.App\overlay-chest.png')
   "overlay-chest.png written"
 }

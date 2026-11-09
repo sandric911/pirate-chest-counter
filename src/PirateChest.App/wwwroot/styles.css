@@ -122,8 +122,12 @@ h3 { font-family: var(--small); font-weight: 400; font-size: 14px; text-transfor
 .odo .strip { display: flex; flex-direction: column; will-change: transform; }
 .odo .strip > span { height: 1em; display: block; text-align: center; }
 .odo .sep { display: inline-block; }
+/* "+N" is a fraction (--r) of the number's size. Both sit at the top of their flex row, so the smaller one is moved
+   down by the difference of where the digits start inside a 1em line box (--digtop, measured from the font at start). */
 .delta {
-  font-family: var(--big); color: var(--green); font-size: .34em; line-height: 1; padding-top: .12em; letter-spacing: .3px;
+  --r: .34;
+  font-family: var(--big); color: var(--green); font-size: calc(var(--r) * 1em); line-height: 1; letter-spacing: .3px;
+  margin-top: calc(var(--digtop, .17) * (1 / var(--r) - 1) * 1em);
   animation: pop .5s var(--ease) both;
 }
 .delta:empty { display: none; }
@@ -135,7 +139,7 @@ h3 { font-family: var(--small); font-weight: 400; font-size: 14px; text-transfor
 .stats > div:first-child { border-left: 0; padding-left: 0; }
 .stat .k { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: .6px; margin-top: 2px; }
 .stat .v { font-family: var(--big); font-size: 44px; line-height: 1; display: flex; align-items: flex-start; gap: 8px; }
-.stat .v .delta { font-size: .5em; }
+.stat .v .delta { --r: .5; }
 .stat .v.gold { color: var(--me); }
 .stat .v.sea { color: var(--squad); }
 .stat .v small { font-family: var(--small); font-size: 15px; color: var(--muted); align-self: flex-end; padding-bottom: 4px; }
@@ -225,7 +229,7 @@ select option { background: var(--panel); }
 label.chk { display: flex; gap: 9px; align-items: center; cursor: pointer; }
 label.chk input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
 .seg { display: inline-flex; background: var(--panel-2); border-radius: 8px; padding: 3px; gap: 3px; }
-.seg button { background: transparent; color: var(--muted); padding: 8px 14px 6px; font-size: 18px; }
+.seg button { background: transparent; color: var(--muted); padding: 8px 14px 6px; font-size: 18px; white-space: nowrap; }
 .seg button:hover { color: var(--text); background: rgba(255, 255, 255, .05); }
 .seg button.on { background: var(--accent); color: var(--accent-ink); }
 .switch { position: relative; width: 46px; height: 26px; border-radius: 13px; background: #2a3a66; border: 0; padding: 0; cursor: pointer; transition: background .2s; }
@@ -266,9 +270,9 @@ input[type=color] { width: 36px; height: 30px; padding: 0; border: 0; background
 .mapside .kv { grid-template-columns: 1fr auto; }
 
 /* ---------------------------------------------------------------- overlay settings */
-.ovl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; align-items: start; }
+.ovl { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 .rows { display: flex; flex-direction: column; }
-.row { display: grid; grid-template-columns: 170px 1fr; gap: 14px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+.row { display: grid; grid-template-columns: 190px 1fr; gap: 14px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
 .row:first-child { border-top: 0; padding-top: 0; }
 .row .label { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: .6px; }
 .row .ctrl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }

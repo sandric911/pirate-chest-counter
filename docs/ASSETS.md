@@ -1,24 +1,28 @@
-# Изображения Fortnite в интерфейсе
+# Изображения и шрифты Fortnite в программе
 
-Картинки сундуков и иконки в `src/PirateChest.App/wwwroot/img/` — ассеты Fortnite, взятые с
-[Fortnite Wiki](https://fortnite.fandom.com) без изменений (в формате WebP, как их отдаёт CDN вики).
-Они принадлежат Epic Games и **не входят в MIT-лицензию** этого репозитория. Используются по правилам Epic для
-фанатского контента: программа бесплатная и некоммерческая.
+Всё перечисленное ниже принадлежит правообладателям и **не входит в MIT-лицензию** этого репозитория. Программа
+бесплатная и некоммерческая; материалы Epic используются по правилам Epic для фанатского контента.
 
 > Portions of the materials used are trademarks and/or copyrighted works of Epic Games, Inc. All rights reserved by Epic.
 > This material is not official and is not endorsed by Epic.
 
-| Файл | Источник на вики |
-|---|---|
-| `chest.webp` | [File:Chest (v23.00) - Container - Fortnite.png](https://fortnite.fandom.com/wiki/File:Chest_(v23.00)_-_Container_-_Fortnite.png) |
-| `chest-rare.webp` | [File:Rare Chest (v23.00) - Container - Fortnite.png](https://fortnite.fandom.com/wiki/File:Rare_Chest_(v23.00)_-_Container_-_Fortnite.png) |
-| `chest-sprite.webp` | [File:Sprite Chest - Container - Fortnite.png](https://fortnite.fandom.com/wiki/File:Sprite_Chest_-_Container_-_Fortnite.png) |
-| `crown.webp` | [File:Accolade Category Victory Royale - Icon - Fortnite.png](https://fortnite.fandom.com/wiki/File:Accolade_Category_Victory_Royale_-_Icon_-_Fortnite.png) |
-| `chest-icon.webp` | [File:Chest - Icon - Creative.png](https://fortnite.fandom.com/wiki/File:Chest_-_Icon_-_Creative.png) |
-| `squads.webp` | [File:Squads - Icon - Fortnite.png](https://fortnite.fandom.com/wiki/File:Squads_-_Icon_-_Fortnite.png) |
-| `timer.webp` | [File:Timer - Icon - Fortnite.png](https://fortnite.fandom.com/wiki/File:Timer_-_Icon_-_Fortnite.png) |
+## Картинки (`src/PirateChest.App/wwwroot/img/`)
 
-Подложка карты (`assets/map.png`) — скриншот внутриигровой карты, сделанный автором (Fortnite © Epic Games).
-Остальное оформление (цвета, вёрстка, значок программы, мелкие значки «обновить», «внимание», «метка») — своё.
+| Файл | Что это | Источник |
+|---|---|---|
+| `chest.png` | обычный (пиратский) сундук | дал автор |
+| `chest-rare.png` | редкий сундук | дал автор |
+| `chest-sprite.png` | спрайтовый сундук | дал автор |
+| `crown.webp` | корона Victory Royale | [Fortnite Wiki](https://fortnite.fandom.com/wiki/File:Accolade_Category_Victory_Royale_-_Icon_-_Fortnite.png) |
+| `chest-icon.webp` | значок сундука | [Fortnite Wiki](https://fortnite.fandom.com/wiki/File:Chest_-_Icon_-_Creative.png) |
+| `squads.webp` | значок отряда | [Fortnite Wiki](https://fortnite.fandom.com/wiki/File:Squads_-_Icon_-_Fortnite.png) |
+| `timer.webp` | значок таймера | [Fortnite Wiki](https://fortnite.fandom.com/wiki/File:Timer_-_Icon_-_Fortnite.png) |
 
-Шрифтов в репозитории и в программе нет. Свой шрифт пользователь кладёт сам (см. README, «Свой шрифт»).
+Значок программы (`app.ico`, `wwwroot/icon.png`) и картинка сундука в оверлее (`overlay-chest.png`) собраны из
+`chest.png` скриптом `tools/icon/build_icon.ps1`. Подложка карты (`assets/map.png`) — скриншот внутриигровой карты
+(Fortnite © Epic Games). Мелкие значки «обновить», «внимание», «метка» нарисованы заново.
+
+## Шрифты (`src/PirateChest.App/wwwroot/fonts/`)
+
+Burbank Big Condensed Black и Burbank Small Bold (© House Industries / Tal Leming), версии с кириллицей.
+Это коммерческие шрифты; поэтому репозиторий закрытый.

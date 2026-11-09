@@ -16,7 +16,7 @@
 </head>
 <body>
 <div id="c">
-  <img id="chest" src="../../src/PirateChest.App/wwwroot/img/chest.webp" alt="">
+  <img id="chest" src="../../src/PirateChest.App/wwwroot/img/chest.png" alt="">
   <svg viewBox="0 0 256 256">
     <defs>
       <!-- faceted ruby: hard colour steps read as cut facets -->
@@ -45,20 +45,27 @@
   document.getElementById('c').style.transform = `scale(${size / 256})`;
   document.body.style.width = document.body.style.height = `${size}px`;
   const chest = document.getElementById('chest');
-  // The wiki picture has a soft glow around the chest: crop into it so the chest fills the icon.
-  const place = { center: [-26, -18, 308], corner: [-34, -36, 270], sticker: [-26, -18, 308] }[v];
+  // The pirate chest picture fills its square: show it whole (corner variant: smaller, top-left).
+  const place = { center: [0, 0, 256], corner: [-6, -10, 236], sticker: [0, 0, 256] }[v];
   Object.assign(chest.style, { left: `${place[0]}px`, top: `${place[1]}px`, width: `${place[2]}px`, height: `${place[2]}px` });
   // [x, y baseline, font size, outline]
   const f = { center: [128, 226, 236, 14], corner: [182, 246, 200, 13], sticker: [128, 226, 228, 12] }[v];
   const g = document.getElementById('F');
-  const t = (attrs) => `<text x="${f[0]}" y="${f[1]}" font-size="${f[2]}" text-anchor="middle" ${attrs}>F</text>`;
+  const t = (attrs, id = '') => `<text ${id ? `id="${id}"` : ''} x="${f[0]}" y="${f[1]}" font-size="${f[2]}" text-anchor="middle" ${attrs}>F</text>`;
   g.innerHTML =
     (v === 'sticker' ? t(`fill="none" stroke="#fff" stroke-width="${f[3] + 14}" stroke-linejoin="round"`) : '') +
     t(`fill="none" stroke="#2a0008" stroke-width="${f[3]}" stroke-linejoin="round"`) +
-    t('fill="url(#ruby)"') +
+    t('fill="url(#ruby)"', 'Ffill') +
     t('fill="url(#shine)"') +
     `<path d="M0 0l5 13 13 5-13 5-5 13-5-13-13-5 13-5z" fill="#fff" transform="translate(${f[0] + f[2] * 0.2} ${f[1] - f[2] * 0.66}) scale(${f[2] / 236})"/>`;
-  document.fonts.load(`${f[2]}px "Burbank Big"`).then(() => { document.title = 'ready'; });
+  document.fonts.load(`${f[2]}px "Burbank Big"`).then(() => {
+    // Centre the letter by its outline (the F's arms make its advance box lopsided), except in the corner variant.
+    if (v !== 'corner') {
+      const bb = document.getElementById('Ffill').getBBox();
+      g.setAttribute('transform', `translate(${128 - (bb.x + bb.width / 2)} ${128 - (bb.y + bb.height / 2)})`);
+    }
+    document.title = 'ready';
+  });
 </script>
 </body>
 </html>

@@ -2,12 +2,35 @@ using System.Text.RegularExpressions;
 
 namespace PirateChest.App;
 
-/// <summary>Texts the program itself produces: mode and place names, warnings, update status, tray texts.</summary>
+/// <summary>
+/// Interface language: English or Russian (Settings in the window). The page translates its own texts; this covers what
+/// the program itself produces: mode and place names, warnings, update status, tray menu, overlay label.
+/// Until the user picks one, it follows the Windows display language.
+/// </summary>
 public static class Lang
 {
-    /// <summary>The interface is English only (Russian was dropped at the author's request). Russian strings are kept
-    /// next to the English ones in the code for reference, and skip reasons stored in Russian are translated on display.</summary>
-    public static bool En => true;
+    public const string Setting = "lang";
+
+    public static bool En { get; private set; } = !IsRussianWindows;
+
+    public static string Code => En ? "en" : "ru";
+
+    public static event Action? Changed;
+
+    public static bool IsRussianWindows => System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ru";
+
+    public static void Load(Database db) => En = db.Get(Setting) is { } v ? v != "ru" : !IsRussianWindows;
+
+    public static void Set(Database db, string code)
+    {
+        var en = code != "ru";
+        db.Set(Setting, en ? "en" : "ru");
+        if (en != En)
+        {
+            En = en;
+            Changed?.Invoke();
+        }
+    }
 
     public static string T(string ru, string en) => En ? en : ru;
 

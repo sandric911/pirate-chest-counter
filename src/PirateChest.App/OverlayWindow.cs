@@ -160,7 +160,12 @@ public sealed class OverlayWindow : Form
         return new Point(a.Right - size.Width - 32, a.Top + 140);
     }
 
-    private string LabelText => _s.Show switch { "session" => "SESSION", "today" => "TODAY", _ => "MY CHESTS" };
+    private string LabelText => _s.Show switch
+    {
+        "session" => Lang.T("СЕССИЯ", "SESSION"),
+        "today" => Lang.T("СЕГОДНЯ", "TODAY"),
+        _ => Lang.T("МОИ СУНДУКИ", "MY CHESTS"),
+    };
 
     private void Render()
     {
@@ -373,7 +378,7 @@ public sealed class OverlayWindow : Form
 
     private static Font MakeFont(bool big, float px)
     {
-        var name = big ? "Burbank Big Condensed" : "Burbank Small";
+        var name = big ? "Burbank Big" : "Burbank Small"; // "Burbank Big Cd Bk" / "Burbank Small Bold" (Cyrillic builds)
         var fam = Fonts.Families.FirstOrDefault(f => f.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase));
         if (fam != null)
         {

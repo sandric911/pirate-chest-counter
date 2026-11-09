@@ -132,6 +132,15 @@ public sealed class WebServer : IAsyncDisposable
             s.Processor.RecountAll();
             return Results.Ok();
         });
+        app.MapGet("/api/settings", () => Results.Json(new { lang = Lang.Code }));
+        app.MapPost("/api/settings", (SettingsBody body) =>
+        {
+            if (body.Lang is "ru" or "en")
+            {
+                Lang.Set(s.Db, body.Lang);
+            }
+            return Results.Json(new { lang = Lang.Code });
+        });
         app.MapGet("/api/overlay", () =>
         {
             var o = OverlaySettings.Load(s.Db);
@@ -207,6 +216,8 @@ public sealed class WebServer : IAsyncDisposable
     }
 
     public sealed record MoveBody(bool On);
+
+    public sealed record SettingsBody(string? Lang);
 
     /// <summary>Embedded file names, normalised to '/' (MSBuild keeps a backslash for sub-folders such as fonts).</summary>
     private static readonly Dictionary<string, string> Resources = typeof(WebServer).Assembly.GetManifestResourceNames()
