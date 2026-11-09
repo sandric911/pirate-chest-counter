@@ -93,9 +93,9 @@ h3 { font-family: var(--small); font-weight: 400; font-size: 14px; text-transfor
 .section { margin-top: 28px; }
 @media (max-width: 1100px) { .g3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-.panel { background: var(--panel); border-radius: 12px; padding: 18px 22px; min-width: 0; }
+.panel { background: var(--panel); border-radius: 12px; padding: 18px 22px; min-width: 0; container-type: inline-size; }
 .tile {
-  position: relative; overflow: hidden; background: var(--panel); border-radius: 12px; min-width: 0;
+  position: relative; overflow: hidden; background: var(--panel); border-radius: 12px; min-width: 0; container-type: inline-size;
   transition: transform .25s var(--ease), background .25s var(--ease);
 }
 .tile:hover { transform: translateY(-2px); background: var(--panel-2); }
@@ -104,13 +104,13 @@ h3 { font-family: var(--small); font-weight: 400; font-size: 14px; text-transfor
 .tile .sub { color: var(--muted); margin-top: 4px; }
 
 .hero { height: 206px; padding: 24px 28px; }
-.hero .value { font-family: var(--big); font-size: 92px; line-height: .9; margin-bottom: 14px; display: flex; align-items: flex-start; gap: 12px; }
-.hero .pic { right: 20px; top: 50%; width: 176px; height: 176px; transform: translateY(-50%); object-fit: contain; }
-.hero .wi.pic { width: 112px; height: 112px; right: 52px; color: #2f4374; }
+.hero .value { font-family: var(--big); font-size: clamp(52px, 17cqw, 92px); line-height: .9; margin-bottom: 14px; display: flex; align-items: flex-start; gap: 12px; }
+.hero .pic { right: 20px; top: 50%; width: min(176px, 34cqw); height: min(176px, 34cqw); transform: translateY(-50%); object-fit: contain; }
+.hero .wi.pic { width: min(112px, 24cqw); height: min(112px, 24cqw); right: 52px; color: #2f4374; }
 
 .typetile { height: 156px; padding: 20px 24px; display: flex; flex-direction: column; justify-content: flex-end; }
-.typetile .pic { right: 8px; top: 50%; width: 138px; height: 138px; transform: translateY(-50%); object-fit: contain; }
-.typetile .count { font-family: var(--big); font-size: 60px; line-height: .9; margin-bottom: 8px; display: flex; align-items: flex-start; gap: 10px; }
+.typetile .pic { right: 8px; top: 50%; width: min(138px, 40cqw); height: min(138px, 40cqw); transform: translateY(-50%); object-fit: contain; }
+.typetile .count { font-family: var(--big); font-size: clamp(40px, 16cqw, 60px); line-height: .9; margin-bottom: 8px; display: flex; align-items: flex-start; gap: 10px; }
 
 .stattile { padding: 20px 24px; }
 .stattile .value { font-family: var(--big); font-size: 60px; line-height: .95; margin-bottom: 6px; }
@@ -135,16 +135,17 @@ h3 { font-family: var(--small); font-weight: 400; font-size: 14px; text-transfor
 
 /* ---------------------------------------------------------------- stat panels */
 .stats { display: flex; }
-.stats > div { flex: 1; padding: 0 16px; border-left: 1px solid var(--line); }
+.stats > div { flex: 1 1 0; min-width: 0; padding: 0 12px; border-left: 1px solid var(--line); }
 .stats > div:first-child { border-left: 0; padding-left: 0; }
-.stat .k { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: .6px; margin-top: 2px; }
-.stat .v { font-family: var(--big); font-size: 44px; line-height: 1; display: flex; align-items: flex-start; gap: 8px; }
+.stat .k { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: .6px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Numbers follow the panel's width (cqw), so three columns with their "+N" fit even in a narrow window. */
+.stat .v { font-family: var(--big); font-size: clamp(24px, 10cqw, 44px); line-height: 1; display: flex; align-items: flex-start; gap: .16em; }
 .stat .v .delta { --r: .5; }
 .stat .v.gold { color: var(--me); }
 .stat .v.sea { color: var(--squad); }
 .stat .v small { font-family: var(--small); font-size: 15px; color: var(--muted); align-self: flex-end; padding-bottom: 4px; }
 .stat .d { color: var(--muted); margin-top: 6px; }
-.stats.small .v { font-size: 30px; }
+.stats.small .v { font-size: clamp(20px, 7.5cqw, 30px); }
 
 .clock { display: flex; align-items: center; gap: 10px; font-family: var(--big); font-size: 46px; line-height: 1; font-variant-numeric: tabular-nums; }
 .clock .wi { width: 30px; height: 30px; color: var(--accent); }
