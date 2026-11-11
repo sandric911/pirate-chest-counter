@@ -455,10 +455,20 @@ async function renderHome() {
     tickSession();
   };
   update(s0, st0);
-  every(5000, async () => {
+  const refresh = async () => {
     try {
       const [s, st] = await Promise.all([api('/api/summary'), api('/api/status')]);
       update(s, st);
+    } catch { /* next time */ }
+  };
+  every(5000, refresh);
+  // A counted match shows up within a second: the program bumps a number whenever its matches change.
+  let rev = null;
+  every(1000, async () => {
+    try {
+      const r = (await api('/api/rev')).rev;
+      if (rev !== null && r !== rev) refresh();
+      rev = r;
     } catch { /* next time */ }
   });
   every(1000, tickSession);
@@ -927,8 +937,8 @@ async function renderOverlay() {
       <div>
         <div class="preview" style="background-image:url(/map.png)"><div class="ov" id="ovPreview"></div></div>
         <div class="hint">${L(
-          'The overlay is a separate window on top of the game: it does not touch Fortnite. With "Only over Fortnite" it shows only while the Fortnite window is the active one and hides when you switch away. It is visible over the game in <b>Windowed Fullscreen</b> or <b>Windowed</b> display mode. The number updates about half a minute after each match ends; (+N) is what the last match added. Clicks go through it; use Move to drag it into place.',
-          'Оверлей — отдельное окно поверх игры, в Fortnite он не вмешивается. В режиме «Только поверх Fortnite» он виден, только пока окно Fortnite активно, и прячется, когда вы переключаетесь. Поверх игры он виден в режимах экрана <b>«Оконный полноэкранный»</b> и <b>«Оконный»</b>. Число обновляется примерно через полминуты после конца матча; (+N) — сколько принёс последний матч. Клики проходят сквозь оверлей; чтобы поставить его на место, нажмите «Переместить».')}</div>
+          'The overlay is a separate window on top of the game: it does not touch Fortnite. With "Only over Fortnite" it shows only while the Fortnite window is the active one and hides when you switch away. It is visible over the game in <b>Windowed Fullscreen</b> or <b>Windowed</b> display mode. The number updates a few seconds after you leave a match for the lobby; (+N) is what the last match added. Clicks go through it; use Move to drag it into place.',
+          'Оверлей — отдельное окно поверх игры, в Fortnite он не вмешивается. В режиме «Только поверх Fortnite» он виден, только пока окно Fortnite активно, и прячется, когда вы переключаетесь. Поверх игры он виден в режимах экрана <b>«Оконный полноэкранный»</b> и <b>«Оконный»</b>. Число обновляется через несколько секунд после выхода из матча в лобби; (+N) — сколько принёс последний матч. Клики проходят сквозь оверлей; чтобы поставить его на место, нажмите «Переместить».')}</div>
       </div>
     </div>`);
 
