@@ -124,6 +124,8 @@ public sealed class WebServer : IAsyncDisposable
         var stats = new Stats(s.Db);
 
         app.MapGet("/api/ping", () => Results.Json(new { app = AppInfo.Name, version = AppInfo.VersionText, pid = Environment.ProcessId }));
+        // Cheap to ask every second: tells the page that the stored matches changed and it should refresh now.
+        app.MapGet("/api/rev", () => Results.Json(new { rev = s.Processor.Revision }));
         app.MapGet("/api/summary", () => Results.Json(stats.Summary(s.Processor.Status, s.Fortnite.Running)));
         app.MapGet("/api/matches", () => Results.Json(stats.MatchList()));
         app.MapGet("/api/daily", () => Results.Json(stats.Daily()));

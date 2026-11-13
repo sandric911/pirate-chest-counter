@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PirateChest.Core\PirateChest.Core.csproj" />
+    <ProjectReference Include="..\..\src\PirateChest.ReplayReader\PirateChest.ReplayReader.csproj" />
   </ItemGroup>
 
 </Project>

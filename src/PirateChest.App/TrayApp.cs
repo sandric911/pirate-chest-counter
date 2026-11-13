@@ -93,7 +93,12 @@ public sealed class TrayApp : ApplicationContext
             }
         };
 
-        s.Processor.MatchProcessed += (_, _) => _ui.Post(_ => UpdateTooltip(), null);
+        // The overlay shows a counted match at once; the timer below only covers what changes with time (day, session).
+        s.Processor.MatchProcessed += (_, _) => _ui.Post(_ =>
+        {
+            UpdateTooltip();
+            RefreshOverlayValue();
+        }, null);
         s.Processor.BatchFinished += _ => _ui.Post(_ => UpdateTooltip(), null);
         s.Updater.RequestExit = () => _ui.Post(_ => ExitThread(), null);
         s.Updater.CanApplyNow = () => !s.Processor.Busy;
