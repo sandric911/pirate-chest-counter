@@ -26,7 +26,7 @@ dotnet run --project tools/PirateChest.Spike -c Release -- "$env:LOCALAPPDATA\Fo
 | Новая карта | другой остров | новый `assets/map.png` (скриншот из игры) и привязка к нему (`assets/calibration.json`, `tools/assets/pois_from_map.py`), новые места в `pois.json`; затем `python tools/assets/build_map_tiles.py` — скачает официальную карту, сопоставит её со скриншотом и пересоберёт `assets/maptiles` (тайлы, привязка, ориентиры). Атлас сундуков переучится сам |
 
 После исправления: поднять `ChestReplayReader.ParserVersion` (тогда все матчи пересчитаются у пользователей
-автоматически), прогнать `dotnet test`, поставить тег `vX.Y.Z` — CI выпустит релиз, а установленные программы
+автоматически), прогнать `dotnet test`, поставить тег `vX.Y.Z` (или на GitHub: Actions → release → Run workflow на `main`, в поле версии `X.Y.Z` — тег создастся сам) — CI выпустит релиз, а установленные программы
 обновятся сами в течение 6 часов.
 
 ## Журнал: подсчёт сразу после матча
