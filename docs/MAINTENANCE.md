@@ -23,8 +23,17 @@ dotnet run --project tools/PirateChest.Spike -c Release -- "$env:LOCALAPPDATA\Fo
 | Появился новый вид сундука | новый класс в отчёте spike | добавить в `src/PirateChest.Core/chest-classes.json`; неизвестные классы с «Chest», на которых был обыск, и так считаются «другими» |
 | Матчи нового сезона в «Пропущено» | новый билд/даты/плейлисты | `MatchFilter`: `AllowedBuildMajors`, `FromUtc/ToUtc`, `PlaylistPatterns` |
 | Неверная высадка/время | изменились флаги парашюта у `PlayerPawn` | `ChestReplayReader.OnExportRead`, `MatchAnalyzer.FindLanding` |
-| Новая карта | другой остров | новый `assets/map.png` (скриншот), калибровка (кнопка «Калибровка» на вкладке «Карта» или `tools/assets/pois_from_map.py`), новые места в `pois.json`; атлас сундуков переучится сам |
+| Новая карта | другой остров | новый `assets/map.png` (скриншот из игры) и привязка к нему (`assets/calibration.json`, `tools/assets/pois_from_map.py`), новые места в `pois.json`; затем `python tools/assets/build_map_tiles.py` — скачает официальную карту, сопоставит её со скриншотом и пересоберёт `assets/maptiles` (тайлы, привязка, ориентиры). Атлас сундуков переучится сам |
 
 После исправления: поднять `ChestReplayReader.ParserVersion` (тогда все матчи пересчитаются у пользователей
 автоматически), прогнать `dotnet test`, поставить тег `vX.Y.Z` — CI выпустит релиз, а установленные программы
 обновятся сами в течение 6 часов.
+
+## Карта во вкладке «Карта»
+
+`assets/maptiles` собирает `tools/assets/build_map_tiles.py` (`pip install opencv-python-headless pillow numpy`):
+официальная карта 2048×2048 — уровни 0–3, увеличенные — 4–5 над островом; вид «Как в игре» — из `assets/map.png`.
+Если есть картинка острова лучше (например, своя сшитая из скриншотов в 4K), добавьте её как ещё один вид:
+`--style hd=путь.png` — она сама сопоставится с официальной картой, а уровней «своего» разрешения станет больше.
+Названия видов — `STYLE_NAMES` в скрипте. После пересборки меняется версия в `map.json`, и окно перестаёт брать
+тайлы из кэша.

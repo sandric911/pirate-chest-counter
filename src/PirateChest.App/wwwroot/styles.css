@@ -250,25 +250,102 @@ input[type=color] { width: 36px; height: 30px; padding: 0; border: 0; background
 .legend { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
 .legend i { display: inline-block; width: 11px; height: 11px; margin-right: 6px; border-radius: 2px; vertical-align: -1px; }
 
-/* ---------------------------------------------------------------- map */
-.maplayout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
-.mapcol { display: flex; justify-content: center; min-width: 0; }
-.mapframe { position: relative; background: #060b18; border-radius: 12px; overflow: hidden; }
-.mapframe canvas { display: block; width: 100%; height: auto; cursor: grab; touch-action: none; }
-.mapframe canvas.drag { cursor: grabbing; }
-.mapframe .credit { position: absolute; right: 10px; bottom: 8px; font-size: 12px; color: rgba(255, 255, 255, .75); background: rgba(0, 0, 0, .55); padding: 2px 8px; border-radius: 4px; }
-.mapframe .zoom { position: absolute; left: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px; }
-.mapframe .zoom button { background: rgba(7, 13, 29, .85); font-family: Arial, sans-serif; font-weight: 700; }
-.mapside .panel + .panel { margin-top: 12px; }
-.layers { display: flex; flex-direction: column; gap: 9px; margin-top: 6px; }
-.maplegend { display: flex; flex-direction: column; gap: 7px; }
+/* ---------------------------------------------------------------- map: Leaflet over tiles, layer panel on the left */
+.view.fill { padding: 0 18px 18px 0; overflow: hidden; display: flex; }
+.view.fill > .page { max-width: none; flex: 1; min-width: 0; min-height: 0; display: flex; }
+.mapshell { flex: 1; min-width: 0; display: flex; border-radius: 12px; overflow: hidden; background: var(--panel); }
+.mappanel { width: 304px; flex: none; overflow: hidden; background: var(--panel); border-right: 1px solid var(--line); transition: width .28s var(--ease), border-color .28s; }
+.mapshell.collapsed .mappanel { width: 0; border-color: transparent; }
+.mpscroll { width: 304px; height: 100%; overflow-y: auto; padding: 16px 16px 20px; scrollbar-color: #2a3a66 transparent; }
+.mapbox { position: relative; flex: 1; min-width: 0; background: #0e5297; }
+#lmap { position: absolute; inset: 0; }
+
+.msearch { position: relative; margin-bottom: 6px; }
+.msearch > .ico { position: absolute; left: 11px; top: 10px; width: 16px; height: 16px; color: var(--muted); pointer-events: none; }
+.msearch input {
+  width: 100%; font-family: var(--small); font-size: 15px; color: var(--text); padding: 8px 10px 8px 34px;
+  background: var(--panel-2); border: 0; border-radius: 8px; outline: none; user-select: text;
+}
+.msearch input::placeholder { color: var(--muted); }
+.msearch input:focus { box-shadow: inset 0 0 0 2px rgba(246, 210, 74, .55); }
+.mresults { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; background: #0b1530; border-radius: 8px; padding: 4px; box-shadow: 0 10px 28px rgba(0, 0, 0, .5); }
+.mresults.open { display: block; }
+.mresults button {
+  width: 100%; justify-content: space-between; background: transparent; font-family: var(--small); font-size: 15px;
+  text-transform: none; letter-spacing: 0; padding: 8px 10px; border-radius: 6px;
+}
+.mresults button small { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+.mresults button.sel, .mresults button:hover { background: var(--panel-2); }
+
+.lgroup { padding: 10px 0; border-top: 1px solid var(--line); }
+.lgroup:first-of-type { border-top: 0; }
+.lgroup h3 { margin: 4px 0 10px; }
+.lrow { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+.lrow .lname { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lhead .lname { font-family: var(--big); font-size: 23px; line-height: 1; text-transform: uppercase; letter-spacing: .3px; padding-top: 2px; }
+.lcount { font-family: var(--big); font-size: 19px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 2px; }
+.lhead .lcount { color: var(--label); }
+.lpic { width: 28px; height: 28px; object-fit: contain; margin: 0 -2px; }
+.lnote { color: var(--muted); font-size: 13px; margin: 2px 0 0 56px; }
+.lmk { flex: none; }
+.lmk.sq { width: 12px; height: 12px; background: rgba(6, 16, 31, .45); border: 2px solid var(--squad); }
+.lmk.ot { width: 7px; height: 7px; background: #e3e8f2; border: 1px solid rgba(10, 15, 28, .55); margin: 0 3px; }
+.lheat { flex: none; width: 46px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #6cbcff, #f6d24a, #d2463e); }
+.switch.sm { width: 38px; height: 22px; border-radius: 11px; margin-left: 8px; }
+.switch.sm::after { width: 16px; height: 16px; }
+.switch.sm.on::after { transform: translateX(16px); }
+.caret { flex: none; width: 30px; height: 30px; padding: 0; justify-content: center; background: transparent; color: var(--muted); }
+.caret:hover { background: rgba(255, 255, 255, .06); color: var(--text); }
+.caret .ico { width: 18px; height: 18px; transform: rotate(-90deg); transition: transform .22s var(--ease); }
+.caret.open .ico { transform: rotate(90deg); }
+.lsub { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .26s var(--ease), opacity .2s; }
+.lsub > div { overflow: hidden; min-height: 0; }
+.lsub.open { grid-template-rows: 1fr; }
+.lsub.dim { opacity: .5; }
+.lsub .lrow { min-height: 32px; }
+.lgroup .seg { display: flex; }
+.lgroup .seg button { flex: 1; justify-content: center; padding: 8px 6px 6px; font-size: 17px; }
+.maplegend { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 2px 8px; padding: 10px 12px; border-radius: 8px; background: rgba(0, 0, 0, .16); font-size: 14px; }
 .maplegend > div { display: flex; align-items: center; gap: 8px; }
+.maplegend .lhint { color: var(--label); font-size: 12px; text-transform: uppercase; letter-spacing: .8px; }
 .maplegend .sw { width: 22px; display: inline-flex; justify-content: center; }
 .mk { display: inline-block; border-radius: 50%; border: 1.5px solid #060b18; }
-.maphint { font-size: 13px; color: var(--muted); margin-top: 10px; }
+.maphint { font-size: 13px; color: var(--muted); margin-top: 12px; }
 .kv { display: grid; grid-template-columns: 180px 1fr; gap: 9px 14px; align-items: center; }
 .kv > div:nth-child(odd) { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: .6px; }
-.mapside .kv { grid-template-columns: 1fr auto; }
+.mappanel .kv { grid-template-columns: 1fr auto; gap: 8px 14px; }
+.mappanel .kv .num { font-size: 20px; text-align: right; }
+
+/* yellow map buttons, as on the in-game map */
+.mbtn {
+  width: 40px; height: 40px; padding: 0; justify-content: center; border-radius: 9px; font-size: 28px;
+  background: var(--accent); color: var(--accent-ink); box-shadow: 0 3px 10px rgba(0, 0, 0, .35); z-index: 500;
+}
+.mbtn:hover { background: #ffe06a; }
+.mbtn .ico { width: 20px; height: 20px; }
+.mcollapse { position: absolute; left: 12px; top: 12px; }
+.mcollapse .ico { transition: transform .28s var(--ease); }
+.mapshell.collapsed .mcollapse .ico { transform: rotate(180deg); }
+.mzoom { position: absolute; right: 12px; bottom: 14px; display: flex; flex-direction: column; gap: 6px; z-index: 500; }
+.mcredit { position: absolute; left: 12px; bottom: 10px; z-index: 500; font-size: 12px; color: rgba(255, 255, 255, .8); background: rgba(0, 0, 0, .5); padding: 2px 8px; border-radius: 4px; pointer-events: none; }
+
+.leaflet-container { font-family: var(--small); font-size: 14px; background: transparent; outline: none; }
+.leaflet-container .leaflet-interactive { cursor: pointer; }
+/* At fractional zoom levels the browser leaves hairline seams between tiles. Leaflet hides them by adding the tiles
+   up (plus-lighter), which leaves faint light lines instead; overlapping opaque tiles by a pixel hides them fully. */
+.leaflet-container img.leaflet-tile { mix-blend-mode: normal; width: 257px !important; height: 257px !important; }
+.place span {
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); white-space: nowrap; color: #fff; line-height: 1;
+  paint-order: stroke fill; text-shadow: 0 2px 6px rgba(0, 0, 0, .45);
+}
+.place.named span { font-family: var(--big); font-size: 23px; text-transform: uppercase; letter-spacing: .6px; -webkit-text-stroke: 4.5px rgba(8, 12, 22, .92); }
+.place.landmark span { font-family: var(--small); font-size: 14px; -webkit-text-stroke: 3.5px rgba(8, 12, 22, .88); color: #eef2fa; }
+.mping i { position: absolute; left: -24px; top: -24px; width: 48px; height: 48px; border-radius: 50%; border: 3px solid var(--accent); animation: ping 1.05s ease-out 3 both; }
+.mping span {
+  position: absolute; left: 0; top: -34px; transform: translateX(-50%); white-space: nowrap; padding: 4px 10px 3px; border-radius: 6px;
+  background: var(--accent); color: var(--accent-ink); font-family: var(--big); font-size: 18px; text-transform: uppercase; animation: rise .3s var(--ease) both;
+}
+@keyframes ping { from { transform: scale(.25); opacity: 1; } to { transform: scale(1.5); opacity: 0; } }
 
 /* ---------------------------------------------------------------- overlay settings */
 .ovl { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }

@@ -57,6 +57,8 @@
     <Content Remove="wwwroot\**" />
     <EmbeddedResource Include="wwwroot\**\*" LogicalName="wwwroot/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\assets\map.png" LogicalName="wwwroot/map.png" Condition="Exists('..\..\assets\map.png')" />
+    <!-- Map tab: tiles and map.json made by tools/assets/build_map_tiles.py -->
+    <EmbeddedResource Include="..\..\assets\maptiles\**\*" LogicalName="wwwroot/maptiles/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\assets\pois.json" LogicalName="pois.json" Condition="Exists('..\..\assets\pois.json')" />
     <EmbeddedResource Include="..\..\assets\atlas.json" LogicalName="atlas.json" Condition="Exists('..\..\assets\atlas.json')" />
     <EmbeddedResource Include="app.ico" LogicalName="app.ico" />
