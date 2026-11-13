@@ -24,20 +24,30 @@ public sealed class ProcessorStatus
 
 /// <summary>
 /// Watches the Demos folder and counts finished replays one by one in the background.
-/// A replay is processed as soon as Fortnite has finished it: the header is no longer live and holds the decryption
-/// key. That is noticed within about a second, so a match is counted a few seconds after it ends. A file whose
-/// header cannot tell (unreadable, or the early read failed) waits until it has not been modified for 30 s.
+/// A replay is counted as soon as Fortnite has finished it. While it is recorded, its header is watched (the folder
+/// watcher, plus a look at the file's size and time ten times a second); the moment the header is final the file is
+/// read once, whole, and those very bytes are first checked to be a complete replay (<see cref="ReplayLayout.Complete"/>)
+/// and then counted. So the number is on screen about half a second after Fortnite has written the replay, and it is
+/// never a number from a half-written file. A file that is not complete is not counted early: it waits until it
+/// changes, or, failing that, until it has not been modified for 30 s, the rule every replay went by before.
 /// Replays are opened read-only with FileShare.ReadWrite|Delete; nothing is ever written to them.
 /// </summary>
 public sealed class ReplayProcessor : IDisposable
 {
     private static readonly TimeSpan Settle = TimeSpan.FromSeconds(30);
-    /// <summary>How often a replay that is being recorded is looked at (file size and time only).</summary>
-    private static readonly TimeSpan LivePoll = TimeSpan.FromMilliseconds(250);
+    /// <summary>How often a replay that is being recorded is looked at (file size and time only, the file is not opened).</summary>
+    private static readonly TimeSpan LivePoll = TimeSpan.FromMilliseconds(100);
     /// <summary>Its header is read when the file has changed, and at least this often in case the change went unnoticed.</summary>
-    private static readonly TimeSpan LiveProbe = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan LiveProbe = TimeSpan.FromSeconds(2);
     /// <summary>Fortnite writes to a replay every 20 s or so while recording; one that is quiet for longer is not watched closely.</summary>
     private static readonly TimeSpan ActiveRecording = TimeSpan.FromMinutes(2);
+    /// <summary>
+    /// A replay with a final header whose match data stops short of the length in that header is given this long to
+    /// receive the rest; if it stays as it is, that is all there will be and it is counted.
+    /// </summary>
+    private static readonly TimeSpan IncompleteGrace = TimeSpan.FromSeconds(3);
+    /// <summary>Changes in the folder that are not the end of a match (a new replay, files being copied in) are gathered for this long.</summary>
+    private static readonly TimeSpan Coalesce = TimeSpan.FromSeconds(2);
 
     private sealed class LiveFile
     {
@@ -55,13 +65,22 @@ public sealed class ReplayProcessor : IDisposable
     private readonly List<(string Path, string ReplayId)> _backupTodo = new();
     /// <summary>Replays being recorded right now, as the last scan saw them. Used by the processor thread only.</summary>
     private readonly Dictionary<string, LiveFile> _live = new(StringComparer.OrdinalIgnoreCase);
-    /// <summary>Replays whose early read failed, with the size and time they had: they wait for the 30 s rule.</summary>
-    private readonly Dictionary<string, (long Size, long MtimeTicks)> _earlyFailed = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Finished replays that could not be counted early (not complete, or the read failed), with the size and time they
+    /// had: they are left alone until they change or the given moment comes. Used by the processor thread only.
+    /// </summary>
+    private readonly Dictionary<string, (long Size, long MtimeTicks, DateTime RetryUtc)> _deferred = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// The replay that was just read whole and found complete, kept until it is counted a moment later, so the file
+    /// is read once. One at a time: a replay is 10–20 MB.
+    /// </summary>
+    private (string Path, long Size, long MtimeTicks, byte[] Bytes)? _snapshot;
     /// <summary>Paths reported by the folder watcher since the processor thread last looked.</summary>
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _changed = new();
     private volatile bool _rescan = true;
     private bool _warm;
     private long _revision;
+    private TaskCompletionSource _revisionChanged = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public ProcessorStatus Status { get; } = new() { DemosDir = AppPaths.DemosDir };
 
@@ -75,16 +94,46 @@ public sealed class ReplayProcessor : IDisposable
     /// <summary>Grows every time the stored matches change, so the window can refresh at once instead of polling everything.</summary>
     public long Revision => Interlocked.Read(ref _revision);
 
+    /// <summary>
+    /// Returns the revision as soon as it differs from <paramref name="since"/>, or after <paramref name="timeout"/>
+    /// at the latest. The window keeps one such request open, so it learns of a counted match the moment it is stored.
+    /// </summary>
+    public async Task<long> WaitForRevisionAsync(long? since, TimeSpan timeout, CancellationToken cancel)
+    {
+        var changed = Volatile.Read(ref _revisionChanged).Task; // taken before the comparison: a bump in between is not lost
+        if (since == Revision && !_cts.IsCancellationRequested)
+        {
+            try
+            {
+                await changed.WaitAsync(timeout, cancel);
+            }
+            catch (TimeoutException)
+            {
+                // nothing changed: the caller asks again
+            }
+        }
+        return Revision;
+    }
+
+    private void BumpRevision()
+    {
+        Interlocked.Increment(ref _revision);
+        Interlocked.Exchange(ref _revisionChanged, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult();
+    }
+
     public ReplayProcessor(Database db, ChestAtlas atlas)
     {
         _db = db;
         _atlas = atlas;
+        ReplayFiles.ReadAllPawnFields = _db.Get(ReadAllPawnFieldsKey) == AppInfo.VersionText;
     }
 
     public void Start()
     {
         TryWatch();
-        _thread = new Thread(Loop) { IsBackground = true, Name = "replay-processor", Priority = ThreadPriority.BelowNormal };
+        // Watching costs next to nothing and must not wait behind the game for a free core, so the thread runs at
+        // normal priority; the heavy work it does (a backlog, backup copies, the warm-up) lowers it for itself.
+        _thread = new Thread(Loop) { IsBackground = true, Name = "replay-processor" };
         _thread.Start();
     }
 
@@ -130,33 +179,68 @@ public sealed class ReplayProcessor : IDisposable
 
     private void Loop()
     {
+        string? finished = null;
         while (!_cts.IsCancellationRequested)
         {
             try
             {
                 TryWatch();
+                if (finished is { } path)
+                {
+                    // The match has just ended: only its replay is looked at and counted. The folder is scanned
+                    // right after, when the number is already on screen.
+                    finished = null;
+                    _live.Remove(path);
+                    _rescan = true;
+                    if (ExamineOne(path))
+                    {
+                        ProcessBatch(new List<string> { path });
+                    }
+                    continue;
+                }
                 var queue = Scan();
                 if (queue.Count > 0)
                 {
                     ProcessBatch(queue);
                     continue; // rescan right away: more files may have settled meanwhile
                 }
-                MakeBackups();
-                WarmUp();
+                InBackground(() =>
+                {
+                    MakeBackups();
+                    WarmUp();
+                });
             }
             catch (Exception ex)
             {
                 Log.Error("processor loop", ex);
             }
-            WaitForWork();
+            finished = WaitForWork();
+        }
+    }
+
+    /// <summary>Work nobody is waiting for runs below the priority of everything else on the PC, the game first of all.</summary>
+    private static void InBackground(Action work)
+    {
+        var thread = Thread.CurrentThread;
+        var before = thread.Priority;
+        thread.Priority = ThreadPriority.BelowNormal;
+        try
+        {
+            work();
+        }
+        finally
+        {
+            thread.Priority = before;
         }
     }
 
     /// <summary>
-    /// The first replay read after the program starts takes several times longer than the following ones: the parser
-    /// builds its readers and .NET compiles them. Reading one already counted replay ahead of time, in the background,
-    /// moves that cost to the start of the program, so the first match of the evening is counted as fast as the rest.
-    /// The result is thrown away.
+    /// Once after the program starts, in the background, one already counted replay is read and the result thrown
+    /// away. It does two things. The first replay read takes several times longer than the following ones (the parser
+    /// builds its readers, .NET compiles them); this moves that cost to the start of the program, so the first match
+    /// of the evening is counted as fast as the rest. And the replay is read both ways, with only the pawn fields the
+    /// counting uses and with all of them: if the results ever differ (a Fortnite update the fast reading does not
+    /// agree with), the program goes back to reading everything and counts every match again.
     /// </summary>
     private void WarmUp()
     {
@@ -164,18 +248,31 @@ public sealed class ReplayProcessor : IDisposable
         {
             return;
         }
-        _warm = true;
         try
         {
             var known = _db.Files().Where(f => f.Status is "done" or "skipped" && File.Exists(f.Path)).ToList();
             var pick = known.OrderByDescending(f => f.Status == "done").ThenByDescending(f => f.MtimeTicks).FirstOrDefault();
             if (pick == null)
             {
-                return; // nothing counted yet: the first match pays for the warm-up itself
+                return; // nothing counted yet: the first match pays for the warm-up itself, and the check follows it
             }
+            _warm = true; // once per run, also when a backlog has just been counted: the check below is wanted either way
+            var name = Path.GetFileName(pick.Path);
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            ReplayFiles.Parse(pick.Path);
-            Log.Info($"warm-up: read {Path.GetFileName(pick.Path)} in {sw.Elapsed.TotalSeconds:F1} s");
+            var bytes = ReplayFiles.ReadAll(pick.Path);
+            ReplayFiles.Inspect(bytes);
+            if (ReplayFiles.ReadAllPawnFields)
+            {
+                ReplayFiles.Parse(bytes);
+            }
+            else if (!ReplayFiles.SameWithAllPawnFields(bytes))
+            {
+                Log.Error($"{name}: reading only the pawn fields that are used gave a different result than reading all of them. All fields are read from now on, and every match is counted again.");
+                ReplayFiles.ReadAllPawnFields = true;
+                _db.Set(ReadAllPawnFieldsKey, AppInfo.VersionText);
+                RecountAll();
+            }
+            Log.Info($"warm-up: read {name} in {sw.Elapsed.TotalSeconds:F1} s");
         }
         catch (Exception ex)
         {
@@ -184,51 +281,57 @@ public sealed class ReplayProcessor : IDisposable
         GC.Collect();
     }
 
+    /// <summary>Setting that holds the program version in which the fast pawn reading was found to differ; it is tried again after an update.</summary>
+    private const string ReadAllPawnFieldsKey = "read_all_pawn_fields";
+
     /// <summary>
-    /// Waits until the folder has to be scanned again: a replay that was being recorded is finished, something else
-    /// changed in the folder, or the periodic rescan is due (a safety net for missed watcher events; unreadable
-    /// files also need time to settle).
+    /// Waits until there is something to do. Returns the path of a replay that Fortnite has just finished, to be
+    /// counted at once; or null when the folder has to be scanned: something else changed in it, or the periodic
+    /// rescan is due (a safety net for missed watcher events; unreadable files also need time to settle).
     /// </summary>
-    private void WaitForWork()
+    private string? WaitForWork()
     {
         var handles = new[] { _wake, _cts.Token.WaitHandle };
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(Status.Live > 0 ? 15 : 60);
+        var reported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         while (!_cts.IsCancellationRequested)
         {
-            if (LiveReplayFinished())
+            // What the watcher saw: a replay being recorded has its header read at once; anything else means a scan,
+            // a little later (a burst of events is one scan), and the replays being recorded stay watched meanwhile.
+            reported.Clear();
+            while (_changed.TryDequeue(out var path))
             {
-                return; // no pause here: the match has just ended and its number is wanted now
+                if (!reported.Add(path) || _live.ContainsKey(path))
+                {
+                    continue;
+                }
+                _rescan = true;
             }
-            if (_rescan || ChangedOutsideLive())
+            if (LiveReplayFinished(reported) is { } finished)
             {
-                Thread.Sleep(2000); // coalesce bursts of watcher events (a new replay, files being copied in)
-                return;
+                return finished; // no pause here: the match has just ended and its number is wanted now
             }
-            var left = deadline - DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            if (_rescan && deadline > now + Coalesce)
+            {
+                deadline = now + Coalesce;
+            }
+            var left = deadline - now;
             if (left <= TimeSpan.Zero)
             {
-                return;
+                return null;
             }
             WaitHandle.WaitAny(handles, _live.Count > 0 && left > LivePoll ? LivePoll : left);
         }
-    }
-
-    /// <summary>True when the watcher reported a file other than the replays being recorded.</summary>
-    private bool ChangedOutsideLive()
-    {
-        var outside = false;
-        while (_changed.TryDequeue(out var path))
-        {
-            outside |= !_live.ContainsKey(path);
-        }
-        return outside;
+        return null;
     }
 
     /// <summary>
-    /// Looks at the replays being recorded: size and time every time, the header when those changed (Fortnite has
-    /// just written something) or were not looked at for a while. True as soon as one of them is finished or gone.
+    /// Looks at the replays being recorded: size and time every time, the header when those changed or the watcher
+    /// named the file (Fortnite has just written something), or when it was not looked at for a while. Returns the
+    /// first one that Fortnite has finished.
     /// </summary>
-    private bool LiveReplayFinished()
+    private string? LiveReplayFinished(HashSet<string> reported)
     {
         foreach (var (path, seen) in _live)
         {
@@ -237,12 +340,13 @@ public sealed class ReplayProcessor : IDisposable
                 var fi = new FileInfo(path);
                 if (!fi.Exists)
                 {
-                    return true;
+                    _rescan = true; // deleted or renamed: the scan sorts it out
+                    continue;
                 }
                 var size = fi.Length;
                 var mtime = fi.LastWriteTimeUtc.Ticks;
                 var now = DateTime.UtcNow;
-                if (size == seen.Size && mtime == seen.MtimeTicks && now - seen.ProbedUtc < LiveProbe)
+                if (size == seen.Size && mtime == seen.MtimeTicks && !reported.Contains(path) && now - seen.ProbedUtc < LiveProbe)
                 {
                     continue;
                 }
@@ -251,7 +355,7 @@ public sealed class ReplayProcessor : IDisposable
                 seen.ProbedUtc = now;
                 if (FinishedEarly(path, size, mtime))
                 {
-                    return true;
+                    return path;
                 }
             }
             catch (Exception ex)
@@ -259,16 +363,61 @@ public sealed class ReplayProcessor : IDisposable
                 Log.Error($"live check {Path.GetFileName(path)}", ex);
             }
         }
-        return false;
+        return null;
     }
 
     /// <summary>
     /// True when Fortnite has finished this replay although it was written to less than 30 s ago: the header is
-    /// not live and holds the decryption key. Not true again for a file whose early read has already failed.
+    /// not live and holds the decryption key. Not true for a file that was put off (<see cref="_deferred"/>) and has
+    /// neither changed since nor reached its time.
     /// </summary>
     private bool FinishedEarly(string path, long size, long mtimeTicks) =>
-        !(_earlyFailed.TryGetValue(path, out var failed) && failed == (size, mtimeTicks))
+        !(_deferred.TryGetValue(path, out var d) && d.Size == size && d.MtimeTicks == mtimeTicks && DateTime.UtcNow < d.RetryUtc)
         && ReplayFiles.Probe(path) == ReplayHeaderState.Finished;
+
+    /// <summary>
+    /// Reads a replay that Fortnite has just finished, whole, and tells whether these bytes can be counted now: they
+    /// are a complete replay, or one with a final header that has stayed as it is for <see cref="IncompleteGrace"/>.
+    /// If not, the file is put off: until it changes, or until the grace is over.
+    /// </summary>
+    private byte[]? ReadIfCountable(string path, long size, DateTime mtime, out ReplayLayout layout)
+    {
+        var bytes = ReplayFiles.ReadAll(path);
+        layout = ReplayFiles.Inspect(bytes);
+        var after = new FileInfo(path);
+        if (!after.Exists || after.Length != size || after.LastWriteTimeUtc != mtime || bytes.Length != size)
+        {
+            return null; // written to while it was read: not put off, the change itself brings it back
+        }
+        if (layout.Complete)
+        {
+            return bytes;
+        }
+        var name = Path.GetFileName(path);
+        if (layout.State == ReplayHeaderState.Finished && DateTime.UtcNow - mtime >= IncompleteGrace)
+        {
+            Log.Info($"{name}: counted although {layout.Problem}; the file has not changed for {IncompleteGrace.TotalSeconds:F0} s");
+            return bytes;
+        }
+        // A final header on a file that is not all there: seen when a replay is being copied into the folder, and
+        // what a replay would look like if Fortnite ever wrote its header before the rest.
+        var retry = layout.State == ReplayHeaderState.Finished ? mtime + IncompleteGrace : mtime + Settle;
+        if (!(_deferred.TryGetValue(path, out var d) && d.Size == size && d.MtimeTicks == mtime.Ticks))
+        {
+            Log.Info($"{name}: not counted yet, {layout.Problem}");
+        }
+        _deferred[path] = (size, mtime.Ticks, retry);
+        return null;
+    }
+
+    private byte[]? TakeSnapshot(string path, long size, long mtimeTicks)
+    {
+        var kept = _snapshot;
+        _snapshot = null;
+        return kept is { } k && k.Size == size && k.MtimeTicks == mtimeTicks && string.Equals(k.Path, path, StringComparison.OrdinalIgnoreCase)
+            ? k.Bytes
+            : null;
+    }
 
     /// <summary>
     /// Finds finished replays that still need counting. Already counted replays are recognised from the database
@@ -297,26 +446,12 @@ public sealed class ReplayProcessor : IDisposable
         _db.ForgetMissingFiles(files.ToHashSet(StringComparer.OrdinalIgnoreCase));
         _backupTodo.Clear();
         _live.Clear();
-        foreach (var gone in _earlyFailed.Keys.Where(p => !File.Exists(p)).ToList())
+        foreach (var gone in _deferred.Keys.Where(p => !File.Exists(p)).ToList())
         {
-            _earlyFailed.Remove(gone);
+            _deferred.Remove(gone);
         }
         int live = 0, errors = 0;
         DateTime? newest = null, liveSince = null;
-        void NoteLive(FileInfo f)
-        {
-            live++;
-            var created = f.CreationTimeUtc;
-            if (DateTime.UtcNow - created < TimeSpan.FromMinutes(45) && (liveSince == null || created < liveSince))
-            {
-                liveSince = created;
-            }
-            if (DateTime.UtcNow - f.LastWriteTimeUtc < ActiveRecording)
-            {
-                // Watch it closely until the next scan; the header was read just now (or is not worth reading yet).
-                _live[f.FullName] = new LiveFile { Size = f.Length, MtimeTicks = f.LastWriteTimeUtc.Ticks, ProbedUtc = DateTime.UtcNow };
-            }
-        }
 
         foreach (var path in files.OrderBy(f => f))
         {
@@ -330,86 +465,29 @@ public sealed class ReplayProcessor : IDisposable
             {
                 newest = mtime;
             }
-
             rows.TryGetValue(path, out var row);
-            var unchanged = row != null && row.Size == fi.Length && row.MtimeTicks == mtime.Ticks;
-
-            if (unchanged && row!.Status is "done" or "skipped")
+            switch (Examine(fi, row, id => states.TryGetValue(id, out var st) ? st : null))
             {
-                if (row.ReplayId != null && states.TryGetValue(row.ReplayId, out var st))
-                {
-                    if (st.ParserVersion != AppInfo.ParserVersion)
-                    {
-                        queue.Add(path); // the counting rules changed in an update
-                    }
-                    else if (st.Status == "counted" && !IsBackup(path) && !File.Exists(BackupPathOf(row.ReplayId)))
-                    {
-                        _backupTodo.Add((path, row.ReplayId));
-                    }
-                }
-                continue;
-            }
-            if (unchanged && row!.Status == "error")
-            {
-                // Failed replays are retried automatically after the program is updated.
-                if (row.AppVersion != AppInfo.VersionText)
-                {
+                case Verdict.Count:
                     queue.Add(path);
-                }
-                else
-                {
+                    break;
+                case Verdict.Error:
                     errors++;
-                }
-                continue;
+                    break;
+                case Verdict.Live:
+                    live++;
+                    var created = fi.CreationTimeUtc;
+                    if (DateTime.UtcNow - created < TimeSpan.FromMinutes(45) && (liveSince == null || created < liveSince))
+                    {
+                        liveSince = created;
+                    }
+                    if (DateTime.UtcNow - mtime < ActiveRecording)
+                    {
+                        // Watch it closely until the next scan; the header was read just now (or is not worth reading yet).
+                        _live[fi.FullName] = new LiveFile { Size = fi.Length, MtimeTicks = mtime.Ticks, ProbedUtc = DateTime.UtcNow };
+                    }
+                    break;
             }
-            if (unchanged && row!.Status == "pending")
-            {
-                queue.Add(path);
-                continue;
-            }
-
-            // New or changed file. One that Fortnite has finished (header not live, key written) is taken at once;
-            // any other is left alone until it has settled.
-            if (DateTime.UtcNow - mtime < Settle && !FinishedEarly(path, fi.Length, mtime.Ticks))
-            {
-                NoteLive(fi);
-                continue;
-            }
-
-            var peek = ReplayFiles.Peek(path);
-            if (!peek.Valid)
-            {
-                if (DateTime.UtcNow - mtime < TimeSpan.FromMinutes(30))
-                {
-                    NoteLive(fi); // probably still being created
-                    continue;
-                }
-                _db.UpsertFile(path, fi.Length, mtime.Ticks, null, "error", "Не удалось прочитать заголовок: " + peek.Error, null, true);
-                errors++;
-                continue;
-            }
-            if (peek.IsLive)
-            {
-                // A crashed game can leave a replay "live" forever; give it a long grace period, then try anyway.
-                if (DateTime.UtcNow - mtime < TimeSpan.FromHours(3))
-                {
-                    _db.UpsertFile(path, fi.Length, mtime.Ticks, peek.ReplayId, "live");
-                    NoteLive(fi);
-                    continue;
-                }
-            }
-            // The very file that was counted has changed size since: it was read before Fortnite was done with it.
-            var grown = row != null && row.Size != fi.Length && row.ReplayId != null
-                && string.Equals(row.ReplayId, peek.ReplayId, StringComparison.OrdinalIgnoreCase);
-            if (!grown && peek.ReplayId != null && states.TryGetValue(peek.ReplayId, out var known) && known.ParserVersion == AppInfo.ParserVersion)
-            {
-                // Same replay id already counted (copied/renamed file): never count twice.
-                _db.UpsertFile(path, fi.Length, mtime.Ticks, peek.ReplayId, known.Status == "counted" ? "done" : "skipped");
-                continue;
-            }
-
-            _db.UpsertFile(path, fi.Length, mtime.Ticks, peek.ReplayId, "pending", null, peek.Branch);
-            queue.Add(path);
         }
 
         Status.Live = live;
@@ -420,16 +498,135 @@ public sealed class ReplayProcessor : IDisposable
         return queue;
     }
 
+    /// <summary>
+    /// Decides about the one replay that Fortnite has just finished, by the same rules as <see cref="Scan"/> but
+    /// without going through the folder. True when it is to be counted now.
+    /// </summary>
+    private bool ExamineOne(string path)
+    {
+        var fi = new FileInfo(path);
+        if (!fi.Exists || Examine(fi, _db.GetFile(path), id => _db.MatchState(id)) != Verdict.Count)
+        {
+            return false;
+        }
+        Status.Pending = 1;
+        return true;
+    }
+
+    private enum Verdict
+    {
+        /// <summary>Nothing to do: counted already, or deliberately not counted.</summary>
+        Settled,
+        /// <summary>Still being recorded, or not ready to be counted yet.</summary>
+        Live,
+        /// <summary>To be counted now.</summary>
+        Count,
+        /// <summary>Could not be read; it is retried after the program is updated.</summary>
+        Error,
+    }
+
+    /// <summary>What to do with one replay file, given what the database knows about it.</summary>
+    private Verdict Examine(FileInfo fi, FileRow? row, Func<string, (string Status, string ParserVersion)?> stateOf)
+    {
+        var path = fi.FullName;
+        var mtime = fi.LastWriteTimeUtc;
+        var unchanged = row != null && row.Size == fi.Length && row.MtimeTicks == mtime.Ticks;
+
+        if (unchanged && row!.Status is "done" or "skipped")
+        {
+            if (row.ReplayId != null && stateOf(row.ReplayId) is { } st)
+            {
+                if (st.ParserVersion != AppInfo.ParserVersion)
+                {
+                    return Verdict.Count; // the counting rules changed in an update
+                }
+                if (st.Status == "counted" && !IsBackup(path) && !File.Exists(BackupPathOf(row.ReplayId)))
+                {
+                    _backupTodo.Add((path, row.ReplayId));
+                }
+            }
+            return Verdict.Settled;
+        }
+        if (unchanged && row!.Status == "error")
+        {
+            // Failed replays are retried automatically after the program is updated.
+            return row.AppVersion != AppInfo.VersionText ? Verdict.Count : Verdict.Error;
+        }
+        if (unchanged && row!.Status == "pending")
+        {
+            return Verdict.Count;
+        }
+
+        // New or changed file.
+        string? replayId, branch;
+        if (DateTime.UtcNow - mtime < Settle)
+        {
+            // Written to a moment ago. One that Fortnite has finished (header not live, key written) is read whole
+            // right now, and taken if those bytes are a complete replay; any other is left alone until it has settled.
+            if (!FinishedEarly(path, fi.Length, mtime.Ticks))
+            {
+                return Verdict.Live;
+            }
+            var bytes = ReadIfCountable(path, fi.Length, mtime, out var layout);
+            if (bytes == null)
+            {
+                return Verdict.Live;
+            }
+            _snapshot = (path, fi.Length, mtime.Ticks, bytes);
+            replayId = layout.ReplayId;
+            branch = layout.Branch;
+        }
+        else
+        {
+            var peek = ReplayFiles.Peek(path);
+            if (!peek.Valid)
+            {
+                if (DateTime.UtcNow - mtime < TimeSpan.FromMinutes(30))
+                {
+                    return Verdict.Live; // probably still being created
+                }
+                _db.UpsertFile(path, fi.Length, mtime.Ticks, null, "error", "Не удалось прочитать заголовок: " + peek.Error, null, true);
+                return Verdict.Error;
+            }
+            // A crashed game can leave a replay "live" forever; give it a long grace period, then try anyway.
+            if (peek.IsLive && DateTime.UtcNow - mtime < TimeSpan.FromHours(3))
+            {
+                _db.UpsertFile(path, fi.Length, mtime.Ticks, peek.ReplayId, "live");
+                return Verdict.Live;
+            }
+            replayId = peek.ReplayId;
+            branch = peek.Branch;
+        }
+
+        // The very file that was counted has changed since: whatever was read then, it is not what is there now.
+        // (Never expected of a replay Fortnite has finished; this is what puts the number right if it happens.)
+        var recount = row is { Status: "done" or "skipped", ReplayId: not null }
+            && string.Equals(row.ReplayId, replayId, StringComparison.OrdinalIgnoreCase);
+        if (recount)
+        {
+            Log.Info($"{fi.Name}: changed after it was counted ({row!.Size} → {fi.Length} bytes), counting it again");
+        }
+        else if (replayId != null && stateOf(replayId) is { } known && known.ParserVersion == AppInfo.ParserVersion)
+        {
+            // Same replay id already counted (copied/renamed file): never count twice.
+            _snapshot = null;
+            _db.UpsertFile(path, fi.Length, mtime.Ticks, replayId, known.Status == "counted" ? "done" : "skipped");
+            return Verdict.Settled;
+        }
+
+        _db.UpsertFile(path, fi.Length, mtime.Ticks, replayId, "pending", null, branch);
+        return Verdict.Count;
+    }
+
     private void ProcessBatch(List<string> queue)
     {
         var bulk = queue.Count > 1;
         Status.BatchTotal = queue.Count;
         Status.BatchDone = 0;
+        Status.Pending = queue.Count;
         var counted = 0;
+        var thread = Thread.CurrentThread;
 
-        // The match that has just ended is read at normal priority: the player is waiting for its number.
-        // A backlog stays in the background.
-        Thread.CurrentThread.Priority = bulk ? ThreadPriority.BelowNormal : ThreadPriority.Normal;
         try
         {
             foreach (var path in queue)
@@ -439,7 +636,14 @@ public sealed class ReplayProcessor : IDisposable
                     return;
                 }
                 Status.Current = Path.GetFileName(path);
+                // The match that has just ended is read ahead of everything else on the PC, for the half second it
+                // takes: the player is looking at the counter, and the game is on a loading screen. One older replay
+                // is read at normal priority, a backlog in the background.
+                thread.Priority = bulk ? ThreadPriority.BelowNormal
+                    : JustWritten(path) ? ThreadPriority.AboveNormal
+                    : ThreadPriority.Normal;
                 var summary = ProcessOne(path);
+                thread.Priority = bulk ? ThreadPriority.BelowNormal : ThreadPriority.Normal;
                 Status.BatchDone++;
                 Status.Pending = Math.Max(0, queue.Count - Status.BatchDone);
                 if (summary == null)
@@ -454,7 +658,7 @@ public sealed class ReplayProcessor : IDisposable
                 {
                     Status.Current = null; // the window is told right now: it must not see "busy"
                 }
-                Interlocked.Increment(ref _revision);
+                BumpRevision();
                 try
                 {
                     MatchProcessed?.Invoke(summary, bulk);
@@ -466,17 +670,19 @@ public sealed class ReplayProcessor : IDisposable
                 // The copy is made after the number is shown: it only matters later.
                 if (summary.Counted && !IsBackup(path))
                 {
-                    EnsureBackup(path, summary.Meta.ReplayId);
+                    InBackground(() => EnsureBackup(path, summary.Meta.ReplayId));
                 }
             }
         }
         finally
         {
-            Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
+            thread.Priority = ThreadPriority.Normal;
+            _snapshot = null;
+            Status.Current = null;
+            Status.Pending = 0;
         }
 
-        Status.Current = null;
-        Interlocked.Increment(ref _revision);
+        BumpRevision();
         _db.SaveAtlas(_atlas);
         if (bulk)
         {
@@ -492,6 +698,18 @@ public sealed class ReplayProcessor : IDisposable
         GC.Collect();
     }
 
+    private static bool JustWritten(string path)
+    {
+        try
+        {
+            return DateTime.UtcNow - File.GetLastWriteTimeUtc(path) < Settle;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private MatchSummary? ProcessOne(string path)
     {
         var fi = new FileInfo(path);
@@ -502,19 +720,37 @@ public sealed class ReplayProcessor : IDisposable
         var size = fi.Length;
         var mtime = fi.LastWriteTimeUtc;
         var build = _db.GetFile(path)?.Build;
-        _warm = true;
+        var early = DateTime.UtcNow - mtime < Settle;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var trace = ReplayFiles.Parse(path);
+            // A replay written to a moment ago is counted only from bytes that were checked to be a complete replay.
+            // One that has settled is counted as it is, as it always was.
+            var bytes = TakeSnapshot(path, size, mtime.Ticks);
+            if (bytes == null && early)
+            {
+                bytes = ReadIfCountable(path, size, mtime, out _);
+                if (bytes == null)
+                {
+                    _db.UpsertFile(path, size, mtime.Ticks, null, "live", null, build);
+                    return null;
+                }
+            }
+            bytes ??= ReplayFiles.ReadAll(path);
+            if (!early && ReplayFiles.Inspect(bytes) is { Complete: false, State: ReplayHeaderState.Finished } odd)
+            {
+                Log.Info($"{fi.Name}: {odd.Problem}; counted as it is");
+            }
+            var trace = ReplayFiles.Parse(bytes);
             var after = new FileInfo(path);
             if (!after.Exists || after.Length != size || after.LastWriteTimeUtc != mtime)
             {
-                // Fortnite (or a copy in progress) wrote to the file while it was being read: what was read may be
-                // incomplete. Nothing is stored; the next scan looks at the file again.
+                // Fortnite (or a copy in progress) wrote to the file while it was being read: what was read is not
+                // what is there now. Nothing is stored; the next scan looks at the file again.
                 Log.Info($"{fi.Name}: changed while it was being read, will be read again");
                 return null;
             }
-            _earlyFailed.Remove(path);
+            _deferred.Remove(path);
             build = trace.Meta.Branch;
             if (trace.Meta.LengthMs < AppInfo.MinMatchSeconds * 1000L)
             {
@@ -545,17 +781,18 @@ public sealed class ReplayProcessor : IDisposable
             }
             _db.SaveMatch(IsBackup(path) ? FileNameOf(trace.Meta) : fi.Name, summary);
             _db.UpsertFile(path, size, mtime.Ticks, trace.Meta.ReplayId, summary.Counted ? "done" : "skipped", null, build);
-            Log.Info($"{fi.Name}: {(summary.Counted ? $"mine={summary.Count.Mine} squad={summary.Count.MineAndSquad}" : "skipped: " + summary.SkipReason)}");
+            var took = early ? $" ({sw.ElapsedMilliseconds} ms, {(DateTime.UtcNow - mtime).TotalMilliseconds:F0} ms after Fortnite wrote it)" : "";
+            Log.Info($"{fi.Name}: {(summary.Counted ? $"mine={summary.Count.Mine} squad={summary.Count.MineAndSquad}" : "skipped: " + summary.SkipReason)}{took}");
             return summary;
         }
         catch (Exception ex)
         {
-            if (DateTime.UtcNow - mtime < Settle)
+            if (early)
             {
                 // Read right after the match and it failed: perhaps Fortnite was not quite done with the file.
                 // Not an error yet; the file is read again once it has settled.
                 Log.Info($"{fi.Name}: early read failed ({ex.GetType().Name}: {ex.Message}), will be read again once the file has settled");
-                _earlyFailed[path] = (size, mtime.Ticks);
+                _deferred[path] = (size, mtime.Ticks, mtime + Settle);
                 _db.UpsertFile(path, size, mtime.Ticks, null, "live", null, build);
                 return null;
             }
@@ -633,6 +870,7 @@ public sealed class ReplayProcessor : IDisposable
     public void Dispose()
     {
         _cts.Cancel();
+        Volatile.Read(ref _revisionChanged).TrySetResult(); // the window's open request returns, the web server can stop
         _watcher?.Dispose();
         _thread?.Join(TimeSpan.FromSeconds(5));
     }

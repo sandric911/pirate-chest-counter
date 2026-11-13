@@ -9,11 +9,11 @@ namespace PirateChest.Core.Tests;
 /// </summary>
 public class ReplayHeaderProbeTests
 {
-    private static readonly byte[] RealKey = Enumerable.Range(1, 32).Select(i => (byte)(i * 7)).ToArray();
-    private static readonly byte[] ZeroKey = new byte[32];
+    internal static readonly byte[] RealKey = Enumerable.Range(1, 32).Select(i => (byte)(i * 7)).ToArray();
+    internal static readonly byte[] ZeroKey = new byte[32];
 
     /// <summary>The replay info block as Unreal writes it (LocalFileNetworkReplayStreaming), followed by filler.</summary>
-    private static byte[] Header(bool live, bool encrypted, byte[] key, uint fileVersion = 7, int customVersions = 3)
+    internal static byte[] Header(bool live, bool encrypted, byte[] key, uint fileVersion = 7, int customVersions = 3, uint lengthMs = 1_234_000u, bool filler = true)
     {
         using var ms = new MemoryStream();
         using var w = new BinaryWriter(ms);
@@ -24,7 +24,7 @@ public class ReplayHeaderProbeTests
             w.Write(customVersions);
             w.Write(new byte[customVersions * 20]); // guid + version each
         }
-        w.Write(1_234_000u);                  // length, ms
+        w.Write(lengthMs);                    // length, ms
         w.Write(2u);                          // network version
         w.Write(59_594_394u);                 // changelist
         var name = "Unsaved Replay".PadRight(255) + "\0"; // fixed-size friendly name, UTF-16
@@ -36,7 +36,11 @@ public class ReplayHeaderProbeTests
         w.Write(encrypted ? 1u : 0u);
         w.Write((uint)key.Length);
         w.Write(key);
-        w.Write(new byte[256]);               // start of the first chunk; irrelevant here
+        if (filler)
+        {
+            w.Write(new byte[256]);           // start of the first chunk; irrelevant here
+        }
+        w.Flush();
         return ms.ToArray();
     }
 

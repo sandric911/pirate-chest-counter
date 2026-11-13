@@ -29,6 +29,18 @@ dotnet run --project tools/PirateChest.Spike -c Release -- "$env:LOCALAPPDATA\Fo
 автоматически), прогнать `dotnet test`, поставить тег `vX.Y.Z` — CI выпустит релиз, а установленные программы
 обновятся сами в течение 6 часов.
 
+## Журнал: подсчёт сразу после матча
+
+`%LOCALAPPDATA%\PirateChestCounter\log.txt`. У матча, посчитанного сразу после записи, в строке есть время:
+`(412 ms, 530 ms after Fortnite wrote it)` — разбор и всё время от последней записи Fortnite до сохранения.
+
+| Строка | Что значит | Что делать |
+|---|---|---|
+| `not counted yet, …` | у реплея готовый заголовок, но файл неполный (решение 74); программа ждёт остальное | ничего; если так у каждого матча и следом идёт `counted although …`, Fortnite стал писать реплей иначе: число верное, но появляется на 3 с позже — смотреть `ReplayLayout`/`ReplayFiles.Inspect` |
+| `changed after it was counted … counting it again` | Fortnite писал в файл после готового заголовка; матч пересчитан | разово — ничего; у каждого матча — то же, что выше |
+| `early read failed …` | разбор сразу после записи упал; будет повтор через 30 с тишины | если после повтора «ошибка» — см. таблицу выше |
+| `ERROR … reading only the pawn fields …` | ускоренное чтение персонажей дало другой результат, чем полное (решение 77); программа сама вернулась к полному и пересчитала матчи | сравнить поля в `PawnGroups.UsedFields` с тем, что читает `ChestReplayReader.OnExportRead`; после исправления выпустить версию — проверка повторится сама |
+
 ## Карта во вкладке «Карта»
 
 `assets/maptiles` собирает `tools/assets/build_map_tiles.py` (`pip install opencv-python-headless pillow numpy`):

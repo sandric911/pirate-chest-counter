@@ -16,7 +16,10 @@ namespace PirateChest.ReplayReader;
 ///    upstream model does not declare;
 ///  * captures the channel close reason (upstream drops it), so "destroyed" can be told
 ///    apart from "left relevancy" — same logic as xNocken/replay-reader (closeReason === 0);
-///  * tracks pawn → PlayerState → team links and owner/teammate positions.
+///  * tracks pawn → PlayerState → team links and owner/teammate positions;
+///  * of the 160 player pawn fields upstream models, lets it decode only the five the counting needs
+///    (<see cref="PawnGroups"/>), and keeps pawns out of upstream's own per-player bookkeeping: pawn updates are
+///    most of a replay, and a match is read 20–30 % faster for it, with the same trace.
 /// </summary>
 public class ChestReplayReader : FortniteReplayReader.ReplayReader
 {
@@ -55,6 +58,34 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
 
     /// <summary>When true, every changed container field is recorded in <see cref="ContainerEvent.Raw"/> (diagnostics only).</summary>
     public bool CaptureRawFields { get; set; }
+
+    /// <summary>
+    /// When true, upstream decodes every player pawn field it models and keeps its own record of every pawn, as it
+    /// did before pawn fields were skipped. The trace must come out the same either way; this exists to check
+    /// exactly that (<see cref="ReplayFiles.SameWithAllPawnFields"/>) and to fall back on if it ever does not.
+    /// </summary>
+    public bool ReadAllPawnFields { get; set; }
+
+    private enum GroupKind : byte { Other, Poi, Container, Pawn }
+
+    /// <summary>What each export group of this replay is, so its path is examined once and not on every update.</summary>
+    private readonly Dictionary<NetFieldExportGroup, GroupKind> _groupKinds = new(ReferenceEqualityComparer.Instance);
+    /// <summary>Pawn fields this reader told upstream to skip: not failures, kept out of the diagnostics.</summary>
+    private readonly HashSet<NetFieldExport> _skippedPawnFields = new(ReferenceEqualityComparer.Instance);
+
+    private GroupKind KindOf(NetFieldExportGroup group)
+    {
+        if (!_groupKinds.TryGetValue(group, out var kind))
+        {
+            var path = group.PathName;
+            kind = path.EndsWith("FortPoiManager", StringComparison.Ordinal) ? GroupKind.Poi
+                : ContainerClasses.IsContainerGroup(path) ? GroupKind.Container
+                : PawnGroups.IsPawnGroup(path) ? GroupKind.Pawn
+                : GroupKind.Other;
+            _groupKinds[group] = kind;
+        }
+        return kind;
+    }
 
     public ChestReplayReader() : base(null!, ParseMode.Full) { }
 
@@ -129,19 +160,73 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
 
     public override bool ReceiveProperties(FBitArchive archive, NetFieldExportGroup group, uint channelIndex, out INetFieldExportGroup? exportGroup, bool enablePropertyChecksum = true, bool netDeltaUpdate = false)
     {
-        if (!netDeltaUpdate && group.PathName.EndsWith("FortPoiManager", StringComparison.Ordinal))
+        if (!netDeltaUpdate)
         {
-            exportGroup = null!;
-            return ReadPoiManager(archive, group, enablePropertyChecksum);
-        }
-
-        if (!netDeltaUpdate && ContainerClasses.IsContainerGroup(group.PathName))
-        {
-            exportGroup = null!;
-            return ReadContainer(archive, group, channelIndex, enablePropertyChecksum);
+            switch (KindOf(group))
+            {
+                case GroupKind.Poi:
+                    exportGroup = null!;
+                    return ReadPoiManager(archive, group, enablePropertyChecksum);
+                case GroupKind.Container:
+                    exportGroup = null!;
+                    return ReadContainer(archive, group, channelIndex, enablePropertyChecksum);
+                case GroupKind.Pawn when !ReadAllPawnFields:
+                    SkipUnusedPawnFields(archive, group, enablePropertyChecksum);
+                    break;
+            }
         }
 
         return base.ReceiveProperties(archive, group, channelIndex, out exportGroup, enablePropertyChecksum, netDeltaUpdate);
+    }
+
+    /// <summary>
+    /// Looks through a pawn update before upstream reads it and marks every field the counting does not use as one
+    /// upstream must not decode ("incompatible": it then skips the field's bits). Nothing is decoded here and the
+    /// archive is left exactly where it was, so the fields that are used are still read by upstream, by the same code
+    /// and from the same bits as before. Fields arrive in a replay one by one, hence the look at every update.
+    /// </summary>
+    private void SkipUnusedPawnFields(FBitArchive archive, NetFieldExportGroup group, bool enablePropertyChecksum)
+    {
+        if (archive.IsError)
+        {
+            return;
+        }
+        var start = archive.Position;
+        if (enablePropertyChecksum)
+        {
+            archive.ReadBit();
+        }
+        while (!archive.IsError)
+        {
+            var handle = archive.ReadIntPacked();
+            if (handle == 0 || archive.IsError)
+            {
+                break;
+            }
+            handle--;
+            if (!group.IsValidIndex(handle))
+            {
+                break;
+            }
+            var numBits = archive.ReadIntPacked();
+            if (numBits == 0)
+            {
+                continue;
+            }
+            if (group.NetFieldExports[handle] is { Incompatible: false } export && !PawnGroups.IsUsedField(export.Name))
+            {
+                export.Incompatible = true;
+                _skippedPawnFields.Add(export);
+            }
+            archive.SkipBits(numBits);
+        }
+        // Back to the start of the update, without the error a damaged update may have raised on the way:
+        // upstream meets it again on its own pass and handles it as it always did.
+        if (archive.IsError)
+        {
+            archive.Reset();
+        }
+        archive.Seek(start);
     }
 
     /// <summary>Map grid bounds (A–J × 1–10 on the in-game map). UE5 sends FVector2D as two doubles.</summary>
@@ -358,7 +443,13 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
 
     protected override void OnExportRead(uint channelIndex, INetFieldExportGroup? exportGroup)
     {
-        base.OnExportRead(channelIndex, exportGroup);
+        // Upstream keeps every position of every player for its own PlayerData (a quarter of a million objects in a
+        // match). The trace is built from this class's own samples and never reads PlayerData, so pawns are not
+        // handed to upstream's builder at all.
+        if (exportGroup is not PlayerPawn || ReadAllPawnFields)
+        {
+            base.OnExportRead(channelIndex, exportGroup);
+        }
 
         switch (exportGroup)
         {
@@ -455,7 +546,7 @@ public class ChestReplayReader : FortniteReplayReader.ReplayReader
 
                 foreach (var export in group.NetFieldExports)
                 {
-                    if (export is { Incompatible: true } && KnownModelFields.IsModeled(path, export.Name))
+                    if (export is { Incompatible: true } && !_skippedPawnFields.Contains(export) && KnownModelFields.IsModeled(path, export.Name))
                     {
                         Diagnostics.Incompatible.Add($"{ContainerClasses.ShortName(path)}.{export.Name}");
                     }
@@ -571,6 +662,30 @@ public static class ContainerClasses
         var slash = name.LastIndexOf('/');
         return slash >= 0 ? name[(slash + 1)..] : name;
     }
+}
+
+/// <summary>
+/// Player pawns: the classes upstream reads as <see cref="PlayerPawn"/> (players, bots), and the only fields of theirs
+/// <see cref="ChestReplayReader"/> looks at. Everything else on a pawn (cosmetics, weapons, vehicles, emotes, …) is
+/// skipped without being decoded.
+/// </summary>
+public static class PawnGroups
+{
+    /// <summary>Must list every <see cref="PlayerPawn"/> property read in ChestReplayReader.OnExportRead.</summary>
+    public static readonly IReadOnlySet<string> UsedFields = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "PlayerState", "bIsDBNO", "bIsSkydiving", "bIsParachuteOpen", "ReplicatedMovement",
+    };
+
+    private static readonly Lazy<HashSet<string>> Paths = new(() => typeof(PlayerPawn).Assembly.GetTypes()
+        .Where(t => typeof(PlayerPawn).IsAssignableFrom(t))
+        .Select(t => t.GetCustomAttribute<NetFieldExportGroupAttribute>()?.Path)
+        .OfType<string>()
+        .ToHashSet(StringComparer.Ordinal));
+
+    public static bool IsPawnGroup(string path) => Paths.Value.Contains(path);
+
+    public static bool IsUsedField(string name) => UsedFields.Contains(name);
 }
 
 /// <summary>Field names declared in upstream models, to tell real incompatibilities from "not modeled".</summary>

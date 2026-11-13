@@ -124,8 +124,11 @@ public sealed class WebServer : IAsyncDisposable
         var stats = new Stats(s.Db);
 
         app.MapGet("/api/ping", () => Results.Json(new { app = AppInfo.Name, version = AppInfo.VersionText, pid = Environment.ProcessId }));
-        // Cheap to ask every second: tells the page that the stored matches changed and it should refresh now.
-        app.MapGet("/api/rev", () => Results.Json(new { rev = s.Processor.Revision }));
+        // Tells the page that the stored matches changed and it should refresh now. With ?since=N the answer is held
+        // back until the number is no longer N (25 s at most): the page keeps one such request open and so shows a
+        // counted match the moment it is stored, without asking every second.
+        app.MapGet("/api/rev", async (long? since, HttpContext ctx) =>
+            Results.Json(new { rev = await s.Processor.WaitForRevisionAsync(since, TimeSpan.FromSeconds(25), ctx.RequestAborted) }));
         app.MapGet("/api/summary", () => Results.Json(stats.Summary(s.Processor.Status, s.Fortnite.Running)));
         app.MapGet("/api/matches", () => Results.Json(stats.MatchList()));
         app.MapGet("/api/daily", () => Results.Json(stats.Daily()));
